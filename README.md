@@ -1,5 +1,8 @@
 [![REUSE status](https://api.reuse.software/badge/github.com/cap-java/cds-feature-auditlog-ng)](https://api.reuse.software/info/github.com/cap-java/cds-feature-auditlog-ng)
 
+> [!WARNING]
+> The publishing process of this repository is still in progress.
+
 # cds-feature-auditlog-ng
 
 ## About this project

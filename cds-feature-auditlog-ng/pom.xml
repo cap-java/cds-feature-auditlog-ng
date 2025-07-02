@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.sap.cds</groupId>
+        <artifactId>cds-feature-auditlog-ng-root</artifactId>
+        <version>${revision}</version>
+    </parent>
+
+    <name>AuditLog NG Feature</name>
+    <description>Handler to send auditlog messages to AuditLog Service NG</description>
+    <artifactId>cds-feature-auditlog-ng</artifactId>
+    <url>${cds.url}</url>
+
+    <properties>
+        <original.base.package>com.sap.xs.audit</original.base.package>
+        <new.base.package>com.sap.cds.repackaged.audit</new.base.package>
+        <gen.folder.relative>src/gen/java</gen.folder.relative>
+        <gen.folder.absolute>${basedir}/${gen.folder.relative}</gen.folder.absolute>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.sap.cds</groupId>
+            <artifactId>cds-services-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.sap.cds</groupId>
+            <artifactId>cds-services-utils</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.sap.cds</groupId>
+            <artifactId>cds-services-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <failIfNoTests>false</failIfNoTests>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

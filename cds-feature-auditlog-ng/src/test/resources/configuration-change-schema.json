@@ -1,0 +1,72 @@
+[
+    {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "$ref": "#/definitions/ConfigurationChange",
+        "definitions": {
+            "ConfigurationChange": {
+                "required": [
+                    "newValue",
+                    "oldValue",
+                    "propertyName"
+                ],
+                "properties": {
+                    "newValue": {
+                        "oneOf": [
+                            {
+                                "type": "array"
+                            },
+                            {
+                                "type": "boolean"
+                            },
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "object"
+                            },
+                            {
+                                "type": "string"
+                            }
+                        ],
+                        "title": "Value",
+                        "description": "`Value` represents a dynamically typed value which can be either null, a number, a string, a boolean, a recursive struct value, or a list of values. A producer of value is expected to set one of these variants. Absence of any variant indicates an error. The JSON representation for `Value` is JSON value."
+                    },
+                    "oldValue": {
+                        "oneOf": [
+                            {
+                                "type": "array"
+                            },
+                            {
+                                "type": "boolean"
+                            },
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "object"
+                            },
+                            {
+                                "type": "string"
+                            }
+                        ],
+                        "title": "Value",
+                        "description": "`Value` represents a dynamically typed value which can be either null, a number, a string, a boolean, a recursive struct value, or a list of values. A producer of value is expected to set one of these variants. Absence of any variant indicates an error. The JSON representation for `Value` is JSON value."
+                    },
+                    "propertyName": {
+                        "type": "string"
+                    },
+                    "objectType": {
+                        "type": "string"
+                    },
+                    "objectId": {
+                        "type": "string"
+                    }
+                },
+                "additionalProperties": false,
+                "type": "object",
+                "title": "Configuration Change",
+                "description": "ConfigurationChange states that Configuration has been modified."
+            }
+        }
+    }
+]

@@ -25,10 +25,6 @@ import com.sap.cloud.sdk.cloudplatform.resilience.ResilienceConfiguration;
 import com.sap.cloud.sdk.cloudplatform.resilience.ResilienceDecorator;
 import com.sap.cloud.sdk.cloudplatform.resilience.ResilienceIsolationMode;
 
-/**
- * Implementation for an audit log {@link Communicator} which provides
- * connectivity to the audit log api via the Cloud SDK.
- */
 public class AuditLogNGCommunicator {
 
     private static final Logger logger = LoggerFactory.getLogger(AuditLogNGCommunicator.class);

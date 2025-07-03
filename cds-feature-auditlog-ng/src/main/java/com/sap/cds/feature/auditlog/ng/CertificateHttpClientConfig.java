@@ -35,7 +35,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Provides a configurable HTTP client for certificate-based authentication with retry logic.
  * Usage example:
- *   CloseableHttpClient client = RetryHttpClientConfig.builder()
+ *   CloseableHttpClient client = CertificateHttpClientConfig.builder()
  *       .certPem(certString)
  *       .keyPem(keyString)
  *       .keyPassphrase(passphrase) // optional, only for encrypted keys
@@ -84,7 +84,7 @@ public class CertificateHttpClientConfig {
     }
 
     /**
-     * Returns a builder for {@link RetryHttpClientConfig}.
+     * Returns a builder for {@link CertificateHttpClientConfig}.
      *
      * @return a new Builder instance
      */
@@ -93,7 +93,7 @@ public class CertificateHttpClientConfig {
     }
 
     /**
-     * Builder for {@link RetryHttpClientConfig}.
+     * Builder for {@link CertificateHttpClientConfig}.
      * <p>
      * All fields are optional except for certPem and keyPem, which are required.
      * </p>
@@ -152,8 +152,8 @@ public class CertificateHttpClientConfig {
             return this;
         }
         /**
-         * Builds the {@link RetryHttpClientConfig} instance.
-         * @return a configured RetryHttpClientConfig
+         * Builds the {@link CertificateHttpClientConfig} instance.
+         * @return a configured CertificateHttpClientConfig
          * @throws IllegalArgumentException if certPem or keyPem is missing
          */
         public CertificateHttpClientConfig build() {

@@ -17,50 +17,6 @@ You can emit the following types of audit log events:
 
 Official CAP documentation can be found [here](https://pages.github.tools.sap/cap/docs/java/auditlog).
 
-# Consumption
-
-To consume the Audit Log Service NG, follow these steps:
-
-1. Complete the onboarding [process](https://jira.tools.sap/browse/ALSREQ-163).
-2. Create a [user-provided service instance](https://docs.cloudfoundry.org/devguide/services/user-provided.html) in Cloud Foundry with the following credentials:
-
-```json
-{
-  "url": "als-endpoint",
-  "region": "als-region",
-  "namespace": "registered namespace",
-  "cert": "-----BEGIN CERTIFICATE-----...-----END CERTIFICATE-----",
-  "key": "-----BEGIN PRIVATE KEY-----...-----END PRIVATE KEY-----",
-  "passphrase": "private key pass phrase" // optional
-}
-```
-
-Example command:
-```sh
-cf cups auditlog-ng -p '{
-  "url": "https://your-als-endpoint",
-  "region": "your-region",
-  "namespace": "your-namespace",
-  "cert": "-----BEGIN CERTIFICATE-----...-----END CERTIFICATE-----",
-  "key": "-----BEGIN PRIVATE KEY-----...-----END PRIVATE KEY-----",
-  "passphrase": "your-passphrase"
-}' -t auditlog-ng
-```
-
-3. Bind the user-provided service instance to your application:
-```
-cf bind-service <your-app-name> auditlog-ng
-```
-
-4. Add the Maven Dependency
-```xml
-<dependency>
-	<groupId>com.sap.cds</groupId>
-	<artifactId>cds-feature-auditlog-ng</artifactId>
-	<version>auditlog-ng.version</version> <!-- e.g 1.0.4-SNAPSHOT --> 
-</dependency>
-```
-
 # Testing
 
 For both local and cloud testing, refer to the [cloud-cap-samples-java](https://github.com/SAP-samples/cloud-cap-samples-java) repository and follow the instructions provided in its README.

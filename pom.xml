@@ -28,15 +28,15 @@
     <java.version>17</java.version>
     <maven.compiler.release>${java.version}</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <cds.services.version>3.0.2</cds.services.version>
-    <json-schema-validator.version>1.5.7</json-schema-validator.version>
+    <cds.services.version>4.1.0</cds.services.version>
+    <json-schema-validator.version>1.5.8</json-schema-validator.version>
     <auditlog-common.version>2.7.2</auditlog-common.version>
     <auditlog-client.version>2.8.3</auditlog-client.version>
     <xs-env.version>1.61.0</xs-env.version>
-    <junit-jupiter.version>5.13.1</junit-jupiter.version>
+    <junit-jupiter.version>5.13.2</junit-jupiter.version>
     <assertj.version>3.27.3</assertj.version>
     <mockito.version>5.18.0</mockito.version>
-    <sdk-bom.version>5.17.0</sdk-bom.version>
+    <sdk-bom.version>5.20.0</sdk-bom.version>
     <mockito-bom.version>5.18.0</mockito-bom.version>
     <bcpkix-jdk18on.version>1.81</bcpkix-jdk18on.version>
   </properties>
@@ -48,7 +48,7 @@
 
   <name>CDS Plugin for SAP Audit Log NG - Root</name>
   <description>This artifact is a CAP Java plugin that provides out-of-the box SAP Audit Log NG Service.</description>
-  <url></url> <!-- TODO -->
+  <url>https://github.com/cap-java/cds-feature-auditlog-ng</url>
 
   <modules>
     <module>cds-feature-auditlog-ng</module>
@@ -102,7 +102,7 @@
       <version>${json-schema-validator.version}</version>
       <scope>test</scope>
     </dependency>
-    
+
     <dependency>
       <groupId>com.sap.cds</groupId>
       <artifactId>cds-services-api</artifactId>
@@ -171,6 +171,38 @@
         </executions>
       </plugin>
 
+      <plugin>
+        <artifactId>maven-gpg-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>sign-artifacts</id>
+            <phase>deploy</phase>
+            <goals>
+              <goal>sign</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>org.sonatype.central</groupId>
+        <artifactId>central-publishing-maven-plugin</artifactId>
+        <configuration>
+          <publishingServerId>central</publishingServerId>
+        </configuration>
+      </plugin>
+
+      <plugin>
+        <artifactId>maven-gpg-plugin</artifactId>
+        <version>3.2.7</version>
+      </plugin>
+      <plugin>
+        <groupId>org.sonatype.central</groupId>
+        <artifactId>central-publishing-maven-plugin</artifactId>
+        <version>0.7.0</version>
+        <extensions>true</extensions>
+      </plugin>
+
     </plugins>
 
     <pluginManagement>
@@ -197,15 +229,15 @@
         </plugin>
         <plugin>
           <artifactId>maven-surefire-plugin</artifactId>
-          <version>3.5.2</version>
+          <version>3.5.3</version>
         </plugin>
         <plugin>
           <artifactId>maven-pmd-plugin</artifactId>
-          <version>3.26.0</version>
+          <version>3.27.0</version>
         </plugin>
         <plugin>
           <artifactId>maven-enforcer-plugin</artifactId>
-          <version>3.5.0</version>
+          <version>3.6.0</version>
         </plugin>
         <plugin>
           <groupId>org.codehaus.mojo</groupId>
@@ -220,7 +252,7 @@
         <plugin>
           <groupId>com.github.spotbugs</groupId>
           <artifactId>spotbugs-maven-plugin</artifactId>
-          <version>4.9.2.0</version>
+          <version>4.9.3.2</version>
         </plugin>
       </plugins>
     </pluginManagement>
@@ -233,16 +265,16 @@
       <url>https://common.repositories.cloud.sap/artifactory/cap-java</url>
     </snapshotRepository>
     <repository>
-      <id>ossrh</id>
+      <id>central</id>
       <name>MavenCentral</name>
-      <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
+      <url>https://central.sonatype.com</url>
     </repository>
   </distributionManagement>
 
   <scm>
-    <url></url><!-- TODO -->
-    <connection></connection><!-- TODO -->
-    <developerConnection></developerConnection><!-- TODO -->
+    <url>https://github.com/cap-java/cds-feature-auditlog-ng</url>
+    <connection>scm:git:git@github.com:cap-java/cds-feature-auditlog-ng.git</connection>
+    <developerConnection>scm:git:git@github.com:cap-java/cds-feature-auditlog-ng.git</developerConnection>
   </scm>
 
 </project>

@@ -7,7 +7,7 @@
 
 ## About this project
 
-The Audit Log Service NG Java CAP plugin enables Java CAP applications to emit audit log events in a standardized way. It is fully compatible with the Audit Log Event Catalog, ensuring standardized event semantics and compatibility.
+The CDS plugin for SAP Audit Log service enables Java CAP applications to emit audit log events in a standardized way. It is fully compatible with the Audit Log Event Catalog, ensuring standardized event semantics and compatibility.
 
 You can emit the following types of audit log events:
 - Personal Data Access Event

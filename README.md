@@ -97,7 +97,7 @@ This file simulates the Cloud Foundry environment variables required for your ap
 To get your project running, ensure you have the following prerequisites:
 
 - Java 17 or higher installed
-- A user-provided service instance for Audit Log NG created in your Cloud Foundry space
+- A user-provided service instance for SAP Audit Log service created in your Cloud Foundry space
 - The Maven dependency for `cds-feature-auditlog-ng` added to your project
 
 ## Support, Feedback, Contributing

@@ -3,11 +3,11 @@
 > [!WARNING]
 > The publishing process of this repository is still in progress.
 
-# cds-feature-auditlog-ng
+# CDS plugin for SAP Audit Log service
 
 ## About this project
 
-The Audit Log Service NG Java CAP plugin enables Java CAP applications to emit audit log events in a standardized way. It is fully compatible with the [Audit Log Event Catalog](https://github.tools.sap/wg-observability/telemetry-semantic-conventions/tree/audit-log-events?tab=readme-ov-file#event-catalog), ensuring standardized event semantics and compatibility. 
+The CDS plugin for SAP Audit Log service enables Java CAP applications to emit audit log events in a standardized way. It is fully compatible with the Audit Log Event Catalog, ensuring standardized event semantics and compatibility.
 
 You can emit the following types of audit log events:
 - Personal Data Access Event
@@ -94,7 +94,11 @@ This file simulates the Cloud Foundry environment variables required for your ap
 
 ## Requirements and Setup
 
-*Insert a short description what is required to get your project running...*
+To get your project running, ensure you have the following prerequisites:
+
+- Java 17 or higher installed
+- A user-provided service instance for SAP Audit Log service created in your Cloud Foundry space
+- The Maven dependency for `cds-feature-auditlog-ng` added to your project
 
 ## Support, Feedback, Contributing
 

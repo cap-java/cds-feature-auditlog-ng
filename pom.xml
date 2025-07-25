@@ -1,6 +1,5 @@
 <project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns="http://maven.apache.org/POM/4.0.0"
-  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  xmlns="http://maven.apache.org/POM/4.0.0" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
   <licenses>
@@ -24,7 +23,7 @@
   </developers>
 
   <properties>
-    <revision>0.0.1</revision>
+    <revision>0.0.2-SNAPSHOT</revision>
     <java.version>17</java.version>
     <maven.compiler.release>${java.version}</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -121,7 +120,6 @@
       <plugin>
         <artifactId>maven-surefire-plugin</artifactId>
       </plugin>
-
       <!-- POM FLATTENING FOR CI FRIENDLY VERSIONS -->
       <plugin>
         <groupId>org.codehaus.mojo</groupId>
@@ -147,7 +145,6 @@
           </execution>
         </executions>
       </plugin>
-
       <plugin>
         <artifactId>maven-enforcer-plugin</artifactId>
         <executions>
@@ -170,39 +167,16 @@
           </execution>
         </executions>
       </plugin>
-
       <plugin>
         <artifactId>maven-gpg-plugin</artifactId>
-        <executions>
-          <execution>
-            <id>sign-artifacts</id>
-            <phase>deploy</phase>
-            <goals>
-              <goal>sign</goal>
-            </goals>
-          </execution>
-        </executions>
-      </plugin>
-
-      <plugin>
-        <groupId>org.sonatype.central</groupId>
-        <artifactId>central-publishing-maven-plugin</artifactId>
-        <configuration>
-          <publishingServerId>central</publishingServerId>
-        </configuration>
-      </plugin>
-
-      <plugin>
-        <artifactId>maven-gpg-plugin</artifactId>
-        <version>3.2.7</version>
+        <version>3.2.8</version>
       </plugin>
       <plugin>
         <groupId>org.sonatype.central</groupId>
         <artifactId>central-publishing-maven-plugin</artifactId>
-        <version>0.7.0</version>
+        <version>0.8.0</version>
         <extensions>true</extensions>
       </plugin>
-
     </plugins>
 
     <pluginManagement>
@@ -257,6 +231,35 @@
       </plugins>
     </pluginManagement>
   </build>
+
+  <profiles>
+    <profile>
+      <id>deploy-release</id>
+      <build>
+        <plugins>
+          <plugin>
+            <artifactId>maven-gpg-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>sign-artifacts</id>
+                <phase>deploy</phase>
+                <goals>
+                  <goal>sign</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.sonatype.central</groupId>
+            <artifactId>central-publishing-maven-plugin</artifactId>
+            <configuration>
+              <publishingServerId>central</publishingServerId>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 
   <distributionManagement>
     <snapshotRepository>

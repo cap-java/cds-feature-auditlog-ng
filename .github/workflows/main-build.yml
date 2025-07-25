@@ -7,10 +7,6 @@ env:
 on:
   push:
     branches: [ "main" ]
-  # TODO: remove before merging
-  workflow_dispatch:
-  pull_request:
-    branches: [ "main" ]
 
 jobs:
   build:

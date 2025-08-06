@@ -51,7 +51,7 @@ jobs:
     needs: update-version
     steps:
       - name: Download artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: root-new-version
       - name: Build
@@ -81,7 +81,7 @@ jobs:
     needs: [build]
     steps:
       - name: Download artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: root-build
       - name: Deploy

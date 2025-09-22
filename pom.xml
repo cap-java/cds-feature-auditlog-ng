@@ -36,7 +36,7 @@
     <assertj.version>3.27.3</assertj.version>
     <mockito.version>5.18.0</mockito.version>
     <sdk-bom.version>5.20.0</sdk-bom.version>
-    <mockito-bom.version>5.18.0</mockito-bom.version>
+    <mockito-bom.version>5.20.0</mockito-bom.version>
     <bcpkix-jdk18on.version>1.81</bcpkix-jdk18on.version>
   </properties>
 

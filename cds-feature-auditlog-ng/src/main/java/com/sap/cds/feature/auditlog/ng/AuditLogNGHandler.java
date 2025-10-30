@@ -8,7 +8,6 @@ import static org.slf4j.LoggerFactory.*;
 
 import java.time.Instant;
 import java.util.Collection;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -17,11 +16,9 @@ import org.slf4j.Logger;
 
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.sap.cds.CdsData;
 import com.sap.cds.services.EventContext;
 import com.sap.cds.services.auditlog.Access;
 import com.sap.cds.services.auditlog.Attachment;

@@ -87,13 +87,13 @@ public class AuditLogNGHandler implements EventHandler {
                 communicator.sendBulkRequest(alsEvents);
             }
         } catch (JsonProcessingException e) {
-            LOGGER.error("Audit Log write exception occurred for general event", e);
+            LOGGER.error("Audit Log write exception occurred", e);
             throw new ErrorStatusException(CdsErrorStatuses.AUDITLOG_SERVICE_INVALID_MESSAGE, e);
         } catch (ErrorStatusException e) {
-            LOGGER.error("Audit Log service not available for general event", e);
+            LOGGER.error("Audit Log service not available", e);
             throw new ErrorStatusException(CdsErrorStatuses.AUDITLOG_SERVICE_NOT_AVAILABLE, e);
         } catch (Exception e) {
-            LOGGER.error("Unexpected exception while handling general event", e);
+            LOGGER.error("Unexpected exception", e);
             throw new ErrorStatusException(CdsErrorStatuses.AUDITLOG_SERVICE_INVALID_MESSAGE, e);
         }
     }

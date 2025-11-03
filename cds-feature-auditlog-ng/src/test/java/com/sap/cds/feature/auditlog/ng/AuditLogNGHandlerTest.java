@@ -46,7 +46,6 @@ import com.sap.cds.services.auditlog.SecurityLog;
 import com.sap.cds.services.auditlog.SecurityLogContext;
 import com.sap.cds.services.mt.TenantProviderService;
 import com.sap.cds.services.request.UserInfo;
-import com.sap.cds.services.utils.ErrorStatusException;
 
 public class AuditLogNGHandlerTest {
 
@@ -65,7 +64,10 @@ public class AuditLogNGHandlerTest {
         handler = new AuditLogNGHandler(communicator, tenantService);
     }
 
-    private void runAndAssertEvent(String schemaPath, Runnable handlerMethod) throws Exception {
+    @FunctionalInterface
+    private interface ThrowingRunnable { void run() throws Exception; }
+
+    private void runAndAssertEvent(String schemaPath, ThrowingRunnable handlerMethod) throws Exception {
         ArgumentCaptor<ArrayNode> captor = ArgumentCaptor.forClass(ArrayNode.class);
         handlerMethod.run();
         verify(communicator).sendBulkRequest(captor.capture());
@@ -80,7 +82,7 @@ public class AuditLogNGHandlerTest {
         when(context.getUserInfo()).thenReturn(userInfo);
         when(context.getData()).thenReturn(securityLog);
         when(securityLog.getData()).thenReturn("security event data");
-        runAndAssertEvent("src/test/resources/legacy-security-wrapper-schema.json", () -> handler.handleSecurityEvent(context));
+    runAndAssertEvent("src/test/resources/legacy-security-wrapper-schema.json", () -> handler.handleSecurityEvent(context));
     }
 
     @Test
@@ -112,7 +114,7 @@ public class AuditLogNGHandlerTest {
         when(dataAccessLog.getAccesses()).thenReturn(List.of(access1, access2));
         when(context.getData()).thenReturn(dataAccessLog);
         when(context.getUserInfo()).thenReturn(userInfo);
-        runAndAssertEvent("src/test/resources/dpp-data-access-schema.json", () -> handler.handleDataAccessEvent(context));
+    runAndAssertEvent("src/test/resources/dpp-data-access-schema.json", () -> handler.handleDataAccessEvent(context));
     }
 
     @Test
@@ -206,8 +208,7 @@ public class AuditLogNGHandlerTest {
         when(context.getData()).thenReturn(dataAccessLog);
         when(context.getUserInfo()).thenReturn(userInfo);
 
-        ErrorStatusException ex = assertThrows(ErrorStatusException.class, () -> handler.handleDataAccessEvent(context));
-        Assertions.assertTrue(ex.getCause() instanceof NullPointerException);
+        assertThrows(NullPointerException.class, () -> handler.handleDataAccessEvent(context));
     }
 
     @Test
@@ -291,7 +292,7 @@ public class AuditLogNGHandlerTest {
         when(context.getUserInfo()).thenReturn(userInfo);
         when(context.getData()).thenReturn(securityLog);
         when(securityLog.getData()).thenReturn("{\"legacy\":true}");
-        runAndAssertEvent("src/test/resources/legacy-security-wrapper-schema.json", () -> handler.handleSecurityEvent(context));
+    runAndAssertEvent("src/test/resources/legacy-security-wrapper-schema.json", () -> handler.handleSecurityEvent(context));
     }
 
     @Test

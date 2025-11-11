@@ -27,7 +27,7 @@
     <java.version>17</java.version>
     <maven.compiler.release>${java.version}</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <cds.services.version>4.4.1</cds.services.version>
+    <cds.services.version>4.4.2</cds.services.version>
     <json-schema-validator.version>1.5.8</json-schema-validator.version>
     <auditlog-common.version>2.7.2</auditlog-common.version>
     <auditlog-client.version>2.8.3</auditlog-client.version>
@@ -35,10 +35,9 @@
     <junit-jupiter.version>5.13.4</junit-jupiter.version>
     <assertj.version>3.27.3</assertj.version>
     <mockito.version>5.18.0</mockito.version>
-    <sdk-bom.version>5.20.0</sdk-bom.version>
+    <sdk-bom.version>5.23.0</sdk-bom.version>
     <mockito-bom.version>5.20.0</mockito-bom.version>
     <bcpkix-jdk18on.version>1.82</bcpkix-jdk18on.version>
-
   </properties>
 
   <groupId>com.sap.cds</groupId>
@@ -227,7 +226,7 @@
         <plugin>
           <groupId>com.github.spotbugs</groupId>
           <artifactId>spotbugs-maven-plugin</artifactId>
-          <version>4.9.3.2</version>
+          <version>4.9.8.1</version>
         </plugin>
       </plugins>
     </pluginManagement>

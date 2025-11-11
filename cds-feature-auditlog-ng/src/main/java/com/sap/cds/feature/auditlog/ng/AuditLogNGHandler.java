@@ -3,20 +3,22 @@
  */
 package com.sap.cds.feature.auditlog.ng;
 
+import static java.util.Objects.*;
+import static org.slf4j.LoggerFactory.*;
+
 import java.time.Instant;
 import java.util.Collection;
-import static java.util.Objects.requireNonNull;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
-import static org.slf4j.LoggerFactory.getLogger;
 
-import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.sap.cds.services.EventContext;
 import com.sap.cds.services.auditlog.Access;
 import com.sap.cds.services.auditlog.Attachment;
 import com.sap.cds.services.auditlog.Attribute;
@@ -62,20 +64,64 @@ public class AuditLogNGHandler implements EventHandler {
     }
 
     @On
-    public void handleSecurityEvent(SecurityLogContext context) {
+    public void handleGeneralEvent(EventContext context) {
         try {
-            ArrayNode alsEvents = createSecurityEvent(context);
-            communicator.sendBulkRequest(alsEvents);
-        } catch (JsonParseException e) {
-            LOGGER.error("Audit Log write exception occurred for security event", e);
+            if (context instanceof SecurityLogContext || context.getEvent().equals("securityLog")) {
+                LOGGER.debug("Handling security log event");
+                handleSecurityEvent(context.as(SecurityLogContext.class));
+                return;
+            } else if (context instanceof DataAccessLogContext || context.getEvent().equals("dataAccessLog")) {
+                LOGGER.debug("Handling data access log event");
+                handleDataAccessEvent(context.as(DataAccessLogContext.class));
+                return;
+            } else if (context instanceof ConfigChangeLogContext || context.getEvent().equals("configChangeLog")) {
+                LOGGER.debug("Handling configuration change log event");
+                handleConfigChangeEvent(context.as(ConfigChangeLogContext.class));
+                return;
+            } else if (context instanceof DataModificationLogContext || context.getEvent().equals("dataModificationLog")) {
+                LOGGER.debug("Handling data modification log event");
+                handleDataModificationEvent(context.as(DataModificationLogContext.class));
+                return;
+            } else {
+                ArrayNode alsEvents = createGeneralEvent(context);
+                communicator.sendBulkRequest(alsEvents);
+            }
+        } catch (JsonProcessingException e) {
+            LOGGER.error("Audit Log write exception occurred", e);
             throw new ErrorStatusException(CdsErrorStatuses.AUDITLOG_SERVICE_INVALID_MESSAGE, e);
         } catch (ErrorStatusException e) {
-            LOGGER.error("Audit Log service not available for security event", e);
+            LOGGER.error("Audit Log service not available", e);
             throw new ErrorStatusException(CdsErrorStatuses.AUDITLOG_SERVICE_NOT_AVAILABLE, e);
-       } catch (Exception e) {
-            LOGGER.error("Unexpected exception while handling security event", e);
+        } catch (Exception e) {
+            LOGGER.error("Unexpected exception", e);
             throw new ErrorStatusException(CdsErrorStatuses.AUDITLOG_SERVICE_INVALID_MESSAGE, e);
         }
+    }
+
+    private ArrayNode createGeneralEvent(EventContext context) throws JsonProcessingException {
+        UserInfo userInfo = requireNonNull(context.getUserInfo(), "UserInfo in EventContext must not be null");
+        String eventType = requireNonNull((String) context.getEvent(), "EventType in EventContext must not be null");
+        Map<String, Object> data = (Map<String, Object>) context.get("data");
+        String eventJson = (String) data.get("event");
+
+        ObjectNode eventEnvelope = buildEventEnvelope(OBJECT_MAPPER, eventType, userInfo);
+        ObjectNode metadata = buildEventMetadata();
+        ObjectNode parsedEventNode = (ObjectNode) OBJECT_MAPPER.readTree(eventJson);
+        ObjectNode wrappedDataNode = OBJECT_MAPPER.createObjectNode();
+        wrappedDataNode.set(eventType, parsedEventNode);
+        ObjectNode alsData = buildAuditLogEventData(metadata, wrappedDataNode);
+        eventEnvelope.set("data", alsData);
+
+        ArrayNode result = OBJECT_MAPPER.createArrayNode();
+        result.add(eventEnvelope);
+
+        LOGGER.debug("Created general event for Audit Log NG: {}", result.toString());
+        return result;
+    }
+
+    public void handleSecurityEvent(SecurityLogContext context) throws JsonProcessingException {
+        ArrayNode alsEvents = createSecurityEvent(context);
+        communicator.sendBulkRequest(alsEvents);
     }
 
     /**
@@ -141,21 +187,9 @@ public class AuditLogNGHandler implements EventHandler {
         return envelop;
     }
 
-    @On
-    public void handleDataAccessEvent(DataAccessLogContext context) {
-        try {
-            ArrayNode alsEvents = createAlsDataAccessEvents(context);
-            communicator.sendBulkRequest(alsEvents);
-        } catch (JsonParseException e) {
-            LOGGER.error("Audit Log write exception occurred for data access event", e);
-            throw new ErrorStatusException(CdsErrorStatuses.AUDITLOG_SERVICE_INVALID_MESSAGE, e);
-        } catch (ErrorStatusException e) {
-            LOGGER.error("Audit Log service not available for data access event", e);
-            throw new ErrorStatusException(CdsErrorStatuses.AUDITLOG_SERVICE_NOT_AVAILABLE, e);
-       } catch (Exception e) {
-            LOGGER.error("Unexpected exception while handling data access event", e);
-            throw new ErrorStatusException(CdsErrorStatuses.AUDITLOG_SERVICE_INVALID_MESSAGE, e);
-        }
+    public void handleDataAccessEvent(DataAccessLogContext context) throws JsonProcessingException {
+        ArrayNode alsEvents = createAlsDataAccessEvents(context);
+        communicator.sendBulkRequest(alsEvents);
     }
 
     /**
@@ -221,21 +255,9 @@ public class AuditLogNGHandler implements EventHandler {
         }
     }
 
-    @On
-    public void handleConfigChangeEvent(ConfigChangeLogContext context) {
-        try {
-            ArrayNode alsEvents = createAlsConfigChangeEvents(context);
-            communicator.sendBulkRequest(alsEvents);
-        } catch (JsonParseException e) {
-            LOGGER.error("Audit Log write exception occurred for configuration change event", e);
-            throw new ErrorStatusException(CdsErrorStatuses.AUDITLOG_SERVICE_INVALID_MESSAGE, e);
-        } catch (ErrorStatusException e) {
-            LOGGER.error("Audit Log service not available for configuration change event", e);
-            throw new ErrorStatusException(CdsErrorStatuses.AUDITLOG_SERVICE_NOT_AVAILABLE, e);
-       } catch (Exception e) {
-            LOGGER.error("Unexpected exception while handling configuration change event", e);
-            throw new ErrorStatusException(CdsErrorStatuses.AUDITLOG_SERVICE_INVALID_MESSAGE, e);
-        }
+    public void handleConfigChangeEvent(ConfigChangeLogContext context) throws JsonProcessingException {
+        ArrayNode alsEvents = createAlsConfigChangeEvents(context);
+        communicator.sendBulkRequest(alsEvents);
     }
 
     /**
@@ -280,21 +302,9 @@ public class AuditLogNGHandler implements EventHandler {
         return buildAlsEvent("configurationChange", userInfo, metadata, "configurationChange", changeNode);
     }
 
-    @On
-    public void handleDataModificationEvent(DataModificationLogContext context) {
-        try {
-            ArrayNode alsEvents = createAlsDataModificationEvents(context);
-            communicator.sendBulkRequest(alsEvents);
-        } catch (JsonParseException e) {
-            LOGGER.error("Audit Log write exception occurred for data modification event", e);
-            throw new ErrorStatusException(CdsErrorStatuses.AUDITLOG_SERVICE_INVALID_MESSAGE, e);
-        } catch (ErrorStatusException e) {
-            LOGGER.error("Audit Log service not available for data modification event", e);
-            throw new ErrorStatusException(CdsErrorStatuses.AUDITLOG_SERVICE_NOT_AVAILABLE, e);
-       } catch (Exception e) {
-            LOGGER.error("Unexpected exception while handling data modification event", e);
-            throw new ErrorStatusException(CdsErrorStatuses.AUDITLOG_SERVICE_INVALID_MESSAGE, e);
-        }
+    public void handleDataModificationEvent(DataModificationLogContext context) throws JsonProcessingException {
+        ArrayNode alsEvents = createAlsDataModificationEvents(context);
+        communicator.sendBulkRequest(alsEvents);
     }
 
     /**
@@ -473,9 +483,8 @@ public class AuditLogNGHandler implements EventHandler {
      */
     private void addValueDetails(ObjectNode node, ChangedAttribute attribute, String fieldName) {
         String attributeName = requireNonNull(attribute.getName(), "ChangedAttribute.getName() is null");
-        String newValue = requireNonNull(attribute.getNewValue(), "ChangedAttribute.getNewValue() is null");
         node.put(fieldName, attributeName);
-        node.put("newValue", newValue);
+        node.put("newValue", attribute.getNewValue() != null ? attribute.getNewValue() : "null");
         node.put("oldValue", attribute.getOldValue() != null ? attribute.getOldValue() : "null");
     }
 

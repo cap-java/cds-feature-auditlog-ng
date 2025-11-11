@@ -23,11 +23,11 @@
   </developers>
 
   <properties>
-    <revision>0.0.2-SNAPSHOT</revision>
+    <revision>0.0.2</revision>
     <java.version>17</java.version>
     <maven.compiler.release>${java.version}</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <cds.services.version>4.1.1</cds.services.version>
+    <cds.services.version>4.4.1</cds.services.version>
     <json-schema-validator.version>1.5.8</json-schema-validator.version>
     <auditlog-common.version>2.7.2</auditlog-common.version>
     <auditlog-client.version>2.8.3</auditlog-client.version>
@@ -37,7 +37,8 @@
     <mockito.version>5.18.0</mockito.version>
     <sdk-bom.version>5.20.0</sdk-bom.version>
     <mockito-bom.version>5.20.0</mockito-bom.version>
-    <bcpkix-jdk18on.version>1.81</bcpkix-jdk18on.version>
+    <bcpkix-jdk18on.version>1.82</bcpkix-jdk18on.version>
+
   </properties>
 
   <groupId>com.sap.cds</groupId>
@@ -203,7 +204,7 @@
         </plugin>
         <plugin>
           <artifactId>maven-surefire-plugin</artifactId>
-          <version>3.5.3</version>
+          <version>3.5.4</version>
         </plugin>
         <plugin>
           <artifactId>maven-pmd-plugin</artifactId>

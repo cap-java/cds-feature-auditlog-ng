@@ -68,7 +68,7 @@ public class AuditLogNGCommunicator {
         }
     }
 
-    public String sendBulkRequest(Object auditLogEvents) throws JsonProcessingException {
+    String sendBulkRequest(Object auditLogEvents) throws JsonProcessingException {
         logger.debug("Sending bulk request to audit log service");
         String bulkRequestJson = serializeBulkRequest(auditLogEvents);
         HttpPost request = new HttpPost(serviceUrl + AUDITLOG_EVENTS_ENDPOINT);

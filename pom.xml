@@ -35,7 +35,7 @@
     <junit-jupiter.version>6.0.1</junit-jupiter.version>
     <assertj.version>3.27.3</assertj.version>
     <mockito.version>5.18.0</mockito.version>
-    <sdk-bom.version>5.23.0</sdk-bom.version>
+    <sdk-bom.version>5.24.0</sdk-bom.version>
     <mockito-bom.version>5.20.0</mockito-bom.version>
     <bcpkix-jdk18on.version>1.82</bcpkix-jdk18on.version>
   </properties>
@@ -174,7 +174,7 @@
       <plugin>
         <groupId>org.sonatype.central</groupId>
         <artifactId>central-publishing-maven-plugin</artifactId>
-        <version>0.8.0</version>
+        <version>0.9.0</version>
         <extensions>true</extensions>
       </plugin>
     </plugins>
@@ -207,7 +207,7 @@
         </plugin>
         <plugin>
           <artifactId>maven-pmd-plugin</artifactId>
-          <version>3.27.0</version>
+          <version>3.28.0</version>
         </plugin>
         <plugin>
           <artifactId>maven-enforcer-plugin</artifactId>

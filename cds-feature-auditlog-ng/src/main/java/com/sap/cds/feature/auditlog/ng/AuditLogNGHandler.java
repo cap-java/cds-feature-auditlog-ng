@@ -37,6 +37,7 @@ import com.sap.cds.services.auditlog.DataSubject;
 import com.sap.cds.services.auditlog.KeyValuePair;
 import com.sap.cds.services.auditlog.SecurityLog;
 import com.sap.cds.services.auditlog.SecurityLogContext;
+import com.sap.cds.services.environment.CdsProperties.Security.Mock.User;
 import com.sap.cds.services.handler.EventHandler;
 import com.sap.cds.services.handler.annotations.On;
 import com.sap.cds.services.handler.annotations.ServiceName;
@@ -105,7 +106,7 @@ public class AuditLogNGHandler implements EventHandler {
         String eventJson = (String) data.get("event");
 
         ObjectNode eventEnvelope = buildEventEnvelope(OBJECT_MAPPER, eventType, userInfo);
-        ObjectNode metadata = buildEventMetadata();
+        ObjectNode metadata = buildEventMetadata(userInfo);
         ObjectNode parsedEventNode = (ObjectNode) OBJECT_MAPPER.readTree(eventJson);
         ObjectNode wrappedDataNode = OBJECT_MAPPER.createObjectNode();
         wrappedDataNode.set(eventType, parsedEventNode);
@@ -145,7 +146,7 @@ public class AuditLogNGHandler implements EventHandler {
         SecurityLog data = requireNonNull(context.getData(), "SecurityLogContext.getData() is null");
         UserInfo userInfo = requireNonNull(context.getUserInfo(), "SecurityLogContext.getUserInfo() is null");
         ObjectNode alsEvent = buildEventEnvelope(OBJECT_MAPPER, LEGACY_SECURITY_WRAPPER, userInfo);
-        ObjectNode metadata = buildEventMetadata();
+        ObjectNode metadata = buildEventMetadata(userInfo);
         ObjectNode origEvent = createLegacySecurityOrigEvent(userInfo, data);
         ObjectNode legacySecurityWrapper = OBJECT_MAPPER.createObjectNode();
         try {
@@ -180,7 +181,7 @@ public class AuditLogNGHandler implements EventHandler {
         String formattedData = "action: %s, data: %s".formatted(data.getAction(), data.getData());
         formattedData = formattedData.replace("\r\n", "\\n").replace("\n", "\\n");
         setFieldIfNotNull(envelop, "uuid", UUID.randomUUID().toString());
-        setFieldIfNotNull(envelop, "user", userInfo != null ? userInfo.getName() : "unknown");
+        setFieldIfNotNull(envelop, "user", userInfo.getName() != null ? userInfo.getName() : "unknown");
         setFieldIfNotNull(envelop, "identityProvider", "$IDP");
         setFieldIfNotNull(envelop, "time", Instant.now().toString());
         setFieldIfNotNull(envelop, "data", formattedData != null ? formattedData : "");
@@ -294,7 +295,7 @@ public class AuditLogNGHandler implements EventHandler {
      * @return an ObjectNode representing the audit log event for the configuration change
      */
     private ObjectNode buildConfigChangeEvent(UserInfo userInfo, ConfigChange configChanges, ChangedAttribute attribute) {
-        ObjectNode metadata = buildEventMetadata();
+        ObjectNode metadata = buildEventMetadata(userInfo);
         ObjectNode changeNode = OBJECT_MAPPER.createObjectNode();
         addValueDetails(changeNode, attribute, "propertyName");
         var dataObject = requireNonNull(configChanges.getDataObject(), "ConfigChange.getDataObject() is null");
@@ -357,7 +358,7 @@ public class AuditLogNGHandler implements EventHandler {
      */
     private ObjectNode buildDataModificationAlsEvent(UserInfo userInfo, DataModification modification, ChangedAttribute attribute) {
         DataObject dataObject = requireNonNull(modification.getDataObject(), "DataModification.getDataObject() is null");
-        ObjectNode metadata = buildEventMetadata();
+        ObjectNode metadata = buildEventMetadata(userInfo);
         ObjectNode dataModificationNode = buildDataModificationNode(attribute, modification.getDataSubject(), dataObject);
         return buildAlsEvent("dppDataModification", userInfo, metadata, "dppDataModification", dataModificationNode);
     }
@@ -405,7 +406,7 @@ public class AuditLogNGHandler implements EventHandler {
     private ObjectNode buildEventEnvelope(ObjectMapper mapper, String type, UserInfo userInfo) {
         ObjectNode alsEvent = mapper.createObjectNode();
         alsEvent.put("id", UUID.randomUUID().toString());
-        alsEvent.put("specversion", 1);
+        alsEvent.put("specversion", "1");
         String tenant = (userInfo.getTenant() == null || userInfo.getTenant().isEmpty()) ? tenantService.readProviderTenant() : userInfo.getTenant();
         alsEvent.put("source", String.format("/%s/%s/%s", communicator.getRegion(), communicator.getNamespace(), tenant));
         alsEvent.put("type", type);
@@ -420,9 +421,10 @@ public class AuditLogNGHandler implements EventHandler {
      * @param mapper the {@link ObjectMapper} used to create the ObjectNode
      * @return an {@link ObjectNode} containing the event metadata
      */
-    private ObjectNode buildEventMetadata() {
+    private ObjectNode buildEventMetadata(UserInfo userInfo) {
         ObjectNode metadata = OBJECT_MAPPER.createObjectNode();
         metadata.put("ts", Instant.now().toString());
+        metadata.put("userInitiatorId", userInfo.getName() != null ? userInfo.getName() : "unknown");
         ObjectNode infraOther = metadata.putObject("infrastructure").putObject("other");
         infraOther.put("runtimeType", "Java");
         ObjectNode platformOther = metadata.putObject("platform").putObject("other");
@@ -441,7 +443,7 @@ public class AuditLogNGHandler implements EventHandler {
      * @return an {@link ObjectNode} representing the constructed ALS event for data access
      */
     private ObjectNode buildDataAccessAlsEvent(UserInfo userInfo, Access access, String attribute, String attachmentType, String attachmentId) {
-        ObjectNode metadata = buildEventMetadata();
+        ObjectNode metadata = buildEventMetadata(userInfo);
         ObjectNode dataAccessNode = buildDataAccessNode(access, attribute, attachmentType, attachmentId);
         return buildAlsEvent("dppDataAccess", userInfo, metadata, "dppDataAccess", dataAccessNode);
     }

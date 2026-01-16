@@ -1,73 +1,128 @@
-[
-    {
-        "$schema": "http://json-schema.org/draft-04/schema#",
-        "$ref": "#/definitions/DppDataAccess",
-        "definitions": {
-            "DppDataAccess": {
-                "required": [
-                    "channelType",
-                    "channelId",
-                    "dataSubjectType",
-                    "dataSubjectId",
-                    "objectType",
-                    "objectId",
-                    "attribute"
-                ],
-                "properties": {
-                    "channelType": {
-                        "type": "string"
-                    },
-                    "channelId": {
-                        "type": "string"
-                    },
-                    "dataSubjectType": {
-                        "type": "string"
-                    },
-                    "dataSubjectId": {
-                        "type": "string"
-                    },
-                    "objectType": {
-                        "type": "string"
-                    },
-                    "objectId": {
-                        "type": "string"
-                    },
-                    "attribute": {
-                        "type": "string"
-                    },
-                    "value": {
-                        "oneOf": [
-                            {
-                                "type": "array"
-                            },
-                            {
-                                "type": "boolean"
-                            },
-                            {
-                                "type": "number"
-                            },
-                            {
-                                "type": "object"
-                            },
-                            {
-                                "type": "string"
-                            }
-                        ],
-                        "title": "Value",
-                        "description": "`Value` represents a dynamically typed value which can be either null, a number, a string, a boolean, a recursive struct value, or a list of values. A producer of value is expected to set one of these variants. Absence of any variant indicates an error. The JSON representation for `Value` is JSON value."
-                    },
-                    "attachmentType": {
-                        "type": "string"
-                    },
-                    "attachmentId": {
-                        "type": "string"
-                    }
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "oneOf": [
+        {
+            "$ref": "#/definitions/EventEnvelope"
+        },
+        {
+            "$ref": "#/definitions/DppDataAccess"
+        }
+    ],
+    "definitions": {
+        "DppDataAccess": {
+            "required": [
+                "channelType",
+                "channelId",
+                "dataSubjectType",
+                "dataSubjectId",
+                "objectType",
+                "objectId",
+                "attribute"
+            ],
+            "properties": {
+                "channelType": {
+                    "type": "string"
                 },
-                "additionalProperties": false,
-                "type": "object",
-                "title": "Dpp Data Access",
-                "description": "DppDataAccess states that DPP relevant data has been accessed."
-            }
+                "channelId": {
+                    "type": "string"
+                },
+                "dataSubjectType": {
+                    "type": "string"
+                },
+                "dataSubjectId": {
+                    "type": "string"
+                },
+                "objectType": {
+                    "type": "string"
+                },
+                "objectId": {
+                    "type": "string"
+                },
+                "attribute": {
+                    "type": "string"
+                },
+                "value": {
+                    "oneOf": [
+                        {
+                            "type": "array"
+                        },
+                        {
+                            "type": "boolean"
+                        },
+                        {
+                            "type": "number"
+                        },
+                        {
+                            "type": "object"
+                        },
+                        {
+                            "type": "string"
+                        }
+                    ],
+                    "title": "Value",
+                    "description": "`Value` represents a dynamically typed value which can be either null, a number, a string, a boolean, a recursive struct value, or a list of values. A producer of value is expected to set one of these variants. Absence of any variant indicates an error. The JSON representation for `Value` is JSON value."
+                },
+                "attachmentType": {
+                    "type": "string"
+                },
+                "attachmentId": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "title": "Dpp Data Access",
+            "description": "DppDataAccess states that DPP relevant data has been accessed."
+        },
+        "EventEnvelope": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "specversion": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "time": {
+                    "type": "string"
+                },
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "metadata": {
+                            "type": "object"
+                        },
+                        "data": {
+                            "type": "object",
+                            "properties": {
+                                "dppDataAccess": {
+                                    "$ref": "#/definitions/DppDataAccess"
+                                }
+                            },
+                            "required": [
+                                "dppDataAccess"
+                            ],
+                            "additionalProperties": true
+                        }
+                    },
+                    "required": [
+                        "data"
+                    ],
+                    "additionalProperties": true
+                }
+            },
+            "required": [
+                "specversion",
+                "type",
+                "data"
+            ],
+            "additionalProperties": true
         }
     }
-]
+}

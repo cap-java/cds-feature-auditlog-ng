@@ -8,7 +8,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,10 +21,10 @@ import org.mockito.MockitoAnnotations;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.networknt.schema.JsonSchema;
-import com.networknt.schema.JsonSchemaFactory;
-import com.networknt.schema.SpecVersion;
-import com.networknt.schema.ValidationMessage;
+import com.networknt.schema.Schema;
+import com.networknt.schema.SchemaRegistry;
+import com.networknt.schema.SpecificationVersion;
+import com.networknt.schema.Error;
 import com.sap.cds.services.EventContext;
 import com.sap.cds.services.auditlog.Access;
 import com.sap.cds.services.auditlog.Attachment;
@@ -67,14 +66,6 @@ public class AuditLogNGHandlerTest {
     @FunctionalInterface
     private interface ThrowingRunnable { void run() throws Exception; }
 
-    private void runAndAssertEvent(String schemaPath, ThrowingRunnable handlerMethod) throws Exception {
-        ArgumentCaptor<ArrayNode> captor = ArgumentCaptor.forClass(ArrayNode.class);
-        handlerMethod.run();
-        verify(communicator).sendBulkRequest(captor.capture());
-        ArrayNode actualEvents = captor.getValue();
-        assertJsonMatchesSchema(schemaPath, actualEvents);
-    }
-
     @Test
     public void testHandleSecurityEventSchemaValidation() throws Exception {
         SecurityLogContext context = mock(SecurityLogContext.class);
@@ -82,7 +73,7 @@ public class AuditLogNGHandlerTest {
         when(context.getUserInfo()).thenReturn(userInfo);
         when(context.getData()).thenReturn(securityLog);
         when(securityLog.getData()).thenReturn("security event data");
-    runAndAssertEvent("src/test/resources/legacy-security-wrapper-schema.json", () -> handler.handleSecurityEvent(context));
+        runAndAssertEvent("src/test/resources/legacy-security-wrapper-schema.json", () -> handler.handleSecurityEvent(context));
     }
 
     @Test
@@ -114,7 +105,7 @@ public class AuditLogNGHandlerTest {
         when(dataAccessLog.getAccesses()).thenReturn(List.of(access1, access2));
         when(context.getData()).thenReturn(dataAccessLog);
         when(context.getUserInfo()).thenReturn(userInfo);
-    runAndAssertEvent("src/test/resources/dpp-data-access-schema.json", () -> handler.handleDataAccessEvent(context));
+        runAndAssertEvent("src/test/resources/dpp-data-access-schema.json", () -> handler.handleDataAccessEvent(context));
     }
 
     @Test
@@ -133,11 +124,7 @@ public class AuditLogNGHandlerTest {
         when(configChangeLog.getConfigurations()).thenReturn(List.of(config1, config2));
         when(context.getData()).thenReturn(configChangeLog);
         when(context.getUserInfo()).thenReturn(userInfo);
-        handler.handleConfigChangeEvent(context);
-        ArgumentCaptor<ArrayNode> captor = ArgumentCaptor.forClass(ArrayNode.class);
-        verify(communicator).sendBulkRequest(captor.capture());
-        ArrayNode actualEvents = captor.getValue();
-        assertJsonMatchesSchema("src/test/resources/configuration-change-schema.json", actualEvents);
+        runAndAssertEvent("src/test/resources/configuration-change-schema.json", () -> handler.handleConfigChangeEvent(context));
     }
 
     @Test
@@ -157,12 +144,7 @@ public class AuditLogNGHandlerTest {
         when(dataModificationLog.getModifications()).thenReturn(List.of(modification1, modification2));
         when(context.getData()).thenReturn(dataModificationLog);
         when(context.getUserInfo()).thenReturn(userInfo);
-        handler.handleDataModificationEvent(context);
-        ArgumentCaptor<ArrayNode> captor = ArgumentCaptor.forClass(ArrayNode.class);
-        verify(communicator).sendBulkRequest(captor.capture());
-        ArrayNode actualEvents = captor.getValue();
-        assertJsonMatchesSchema("src/test/resources/configuration-change-schema.json", actualEvents);
-
+        runAndAssertEvent("src/test/resources/dpp-data-modification-schema.json", () -> handler.handleDataModificationEvent(context));
     }
 
     @Test
@@ -185,10 +167,13 @@ public class AuditLogNGHandlerTest {
         ArgumentCaptor<ArrayNode> captor = ArgumentCaptor.forClass(ArrayNode.class);
         handler.handleDataModificationEvent(context);
         verify(communicator).sendBulkRequest(captor.capture());
-        ArrayNode actualEvents = captor.getValue();
-        // Validate the JSON structure
-        assertJsonMatchesSchema("src/test/resources/configuration-change-schema.json", actualEvents);
-        // Further assertions can be done here to check the content of actualEvents
+        JsonNode events = captor.getValue();
+        JsonNode event = events.get(0);
+        JsonNode dppNode = event.get("data").get("data").get("dppDataModification");
+        String objectId = dppNode.get("objectId").asText();
+        String dataSubjectId = dppNode.get("dataSubjectId").asText();
+        assertEquals("aKey:aValue mKey:mValue zKey:zValue", objectId, "objectId should be alphabetically ordered by key");
+        assertEquals("aKey:aValue mKey:mValue zKey:zValue", dataSubjectId, "dataSubjectId should be alphabetically ordered by key");
     }
 
     // --- Additional Tests for Robustness and Coverage ---
@@ -197,33 +182,26 @@ public class AuditLogNGHandlerTest {
         DataAccessLogContext context = mock(DataAccessLogContext.class);
         DataAccessLog dataAccessLog = mock(DataAccessLog.class);
         Access access = mock(Access.class);
-        KeyValuePair id1 = mockKeyValuePair("userId", "user-111");
-        DataObject dataObject = mockDataObject("User", List.of(id1));
-        DataSubject dataSubject = mockDataSubject("Person", List.of(id1));
-        when(access.getDataObject()).thenReturn(dataObject);
-        when(access.getDataSubject()).thenReturn(dataSubject);
         when(access.getAttributes()).thenReturn(null);
-        when(access.getAttachments()).thenReturn(null);
         when(dataAccessLog.getAccesses()).thenReturn(List.of(access));
         when(context.getData()).thenReturn(dataAccessLog);
         when(context.getUserInfo()).thenReturn(userInfo);
 
-        assertThrows(NullPointerException.class, () -> handler.handleDataAccessEvent(context));
+        NullPointerException npe = assertThrows(NullPointerException.class, () -> handler.handleDataAccessEvent(context));
+        assertEquals("Access.getAttributes() is null", npe.getMessage());
     }
 
     @Test
-    public void testHandleConfigChangeEvent_EmptyAttributes() throws Exception {
+    public void testHandleConfigChangeEvent_NullAttributes() throws Exception {
         ConfigChangeLogContext context = mock(ConfigChangeLogContext.class);
         ConfigChangeLog configChangeLog = mock(ConfigChangeLog.class);
-        ConfigChange config = mockConfigChange(List.of(), mockDataObject("AppConfig", List.of()));
+        ConfigChange config = mockConfigChange(null, mockDataObject("AppConfig", List.of()));
         when(configChangeLog.getConfigurations()).thenReturn(List.of(config));
         when(context.getData()).thenReturn(configChangeLog);
         when(context.getUserInfo()).thenReturn(userInfo);
-        handler.handleConfigChangeEvent(context);
-        ArgumentCaptor<ArrayNode> captor = ArgumentCaptor.forClass(ArrayNode.class);
-        verify(communicator).sendBulkRequest(captor.capture());
-        ArrayNode actualEvents = captor.getValue();
-        assertJsonMatchesSchema("src/test/resources/configuration-change-schema.json", actualEvents);
+        
+        NullPointerException npe = assertThrows(NullPointerException.class, () -> handler.handleConfigChangeEvent(context));
+        assertEquals("ConfigChange.getAttributes() is null", npe.getMessage());
     }
 
     @Test
@@ -241,11 +219,8 @@ public class AuditLogNGHandlerTest {
         when(dataModificationLog.getModifications()).thenReturn(mods);
         when(context.getData()).thenReturn(dataModificationLog);
         when(context.getUserInfo()).thenReturn(userInfo);
-        handler.handleDataModificationEvent(context);
-        ArgumentCaptor<ArrayNode> captor = ArgumentCaptor.forClass(ArrayNode.class);
-        verify(communicator).sendBulkRequest(captor.capture());
-        ArrayNode actualEvents = captor.getValue();
-        assertJsonMatchesSchema("src/test/resources/configuration-change-schema.json", actualEvents);
+        ArrayNode actualEvents = runAndAssertEvent("src/test/resources/dpp-data-modification-schema.json",
+            () -> handler.handleDataModificationEvent(context));
         Assertions.assertEquals(100, actualEvents.size(), "Should produce 100 events");
     }
 
@@ -278,11 +253,8 @@ public class AuditLogNGHandlerTest {
         when(context.getUserInfo()).thenReturn(userInfoNull);
         when(context.getData()).thenReturn(securityLog);
         when(securityLog.getData()).thenReturn("security event data");
-        handler.handleSecurityEvent(context);
-        ArgumentCaptor<ArrayNode> captor = ArgumentCaptor.forClass(ArrayNode.class);
-        verify(communicator).sendBulkRequest(captor.capture());
-        ArrayNode actualEvents = captor.getValue();
-        assertJsonMatchesSchema("src/test/resources/legacy-security-wrapper-schema.json", actualEvents);
+        runAndAssertEvent("src/test/resources/legacy-security-wrapper-schema.json",
+            () -> handler.handleSecurityEvent(context));
     }
 
     @Test
@@ -292,7 +264,7 @@ public class AuditLogNGHandlerTest {
         when(context.getUserInfo()).thenReturn(userInfo);
         when(context.getData()).thenReturn(securityLog);
         when(securityLog.getData()).thenReturn("{\"legacy\":true}");
-    runAndAssertEvent("src/test/resources/legacy-security-wrapper-schema.json", () -> handler.handleSecurityEvent(context));
+        runAndAssertEvent("src/test/resources/legacy-security-wrapper-schema.json", () -> handler.handleSecurityEvent(context));
     }
 
     @Test
@@ -308,13 +280,9 @@ public class AuditLogNGHandlerTest {
         outer.put("event", innerJson);
         when(generalContext.get("data")).thenReturn(outer);
 
-        // Execute
-        handler.handleGeneralEvent(generalContext);
-
-        // Capture and validate
-        ArgumentCaptor<ArrayNode> captor = ArgumentCaptor.forClass(ArrayNode.class);
-        verify(communicator).sendBulkRequest(captor.capture());
-        ArrayNode events = captor.getValue();
+        // Execute and schema-validate, capturing events
+        ArrayNode events = runAndAssertEvent("src/test/resources/general-event-schema.json",
+            () -> handler.handleGeneralEvent(generalContext));
         Assertions.assertEquals(1, events.size(), "Exactly one general event expected");
         JsonNode event = events.get(0);
         // Basic top-level assertions
@@ -324,8 +292,7 @@ public class AuditLogNGHandlerTest {
         JsonNode wrapped = dataNode.get("dataExport");
         Assertions.assertEquals("UNSPECIFIED", wrapped.get("channelType").asText());
         Assertions.assertEquals("string", wrapped.get("channelId").asText());
-        // Schema validation (generic general event schema)
-        assertJsonMatchesSchema("src/test/resources/general-event-schema.json", events);
+        // Schema validated above via runAndAssertEvent
     }
 
     private ChangedAttribute mockChangedAttribute(String name, String oldValue, String newValue) {
@@ -385,18 +352,32 @@ public class AuditLogNGHandlerTest {
         return cc;
     }
 
-    private void assertJsonMatchesSchema(String schemaPath, JsonNode dataNode) throws Exception {
-        JsonSchema schema = getTestSchema(schemaPath);
-        Set<ValidationMessage> errors = schema.validate(dataNode);
-        Assertions.assertTrue(errors.isEmpty(), "Schema validation errors: " + errors);
+    private ArrayNode runAndAssertEvent(String schemaPath, ThrowingRunnable handlerMethod) throws Exception {
+        ArgumentCaptor<ArrayNode> captor = ArgumentCaptor.forClass(ArrayNode.class);
+        handlerMethod.run();
+        verify(communicator).sendBulkRequest(captor.capture());
+        ArrayNode actualEvents = captor.getValue();
+        assertJsonMatchesSchema(schemaPath, actualEvents);
+        return actualEvents;
     }
 
-    private JsonSchema getTestSchema(String schemaPath) throws Exception {
-        JsonSchemaFactory factory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V4);
+    private void assertJsonMatchesSchema(String schemaPath, JsonNode dataNode) throws Exception {
+        Schema schema = buildSchema(schemaPath);
+        List<Error> errors = new ArrayList<>();
+        if (dataNode.isArray()) {
+            for (JsonNode item : dataNode) {
+                errors.addAll(schema.validate(item, ctx -> ctx.executionConfig(cfg -> cfg.formatAssertionsEnabled(true))));
+            }
+        } else {
+            errors.addAll(schema.validate(dataNode, ctx -> ctx.executionConfig(cfg -> cfg.formatAssertionsEnabled(true))));
+        }
+        assertEquals(0, errors.size(), "Schema validation errors: " + errors);
+    }
+
+    private Schema buildSchema(String schemaPath) throws Exception {
+        SchemaRegistry schemaRegistry = SchemaRegistry.withDefaultDialect(SpecificationVersion.DRAFT_2020_12);
         ObjectMapper objectMapper = new ObjectMapper();
         JsonNode schemaContent = objectMapper.readTree(new File(schemaPath));
-        JsonSchema schema = factory.getSchema(schemaContent);
-        schema.initializeValidators();
-        return schema;
+        return schemaRegistry.getSchema(schemaContent);
     }
 }

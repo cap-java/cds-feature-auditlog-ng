@@ -35,7 +35,7 @@
     <junit-jupiter.version>6.0.1</junit-jupiter.version>
     <assertj.version>3.27.3</assertj.version>
     <mockito.version>5.18.0</mockito.version>
-    <sdk-bom.version>5.24.0</sdk-bom.version>
+    <sdk-bom.version>5.25.0</sdk-bom.version>
     <mockito-bom.version>5.21.0</mockito-bom.version>
     <bcpkix-jdk18on.version>1.83</bcpkix-jdk18on.version>
   </properties>

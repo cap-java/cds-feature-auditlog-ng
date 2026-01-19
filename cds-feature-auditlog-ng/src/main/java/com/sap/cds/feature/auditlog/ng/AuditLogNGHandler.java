@@ -424,7 +424,7 @@ public class AuditLogNGHandler implements EventHandler {
     private ObjectNode buildEventMetadata(UserInfo userInfo) {
         ObjectNode metadata = OBJECT_MAPPER.createObjectNode();
         metadata.put("ts", Instant.now().toString());
-        metadata.put("userInitiatorId", userInfo.getName() != null ? userInfo.getName() : "unknown");
+        metadata.put("userInitiatorId", userInfo.getName() != null ? userInfo.getName() : "anonymous");
         ObjectNode infraOther = metadata.putObject("infrastructure").putObject("other");
         infraOther.put("runtimeType", "Java");
         ObjectNode platformOther = metadata.putObject("platform").putObject("other");

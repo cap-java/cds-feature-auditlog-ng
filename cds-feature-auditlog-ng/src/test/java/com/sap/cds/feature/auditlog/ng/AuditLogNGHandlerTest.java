@@ -292,7 +292,6 @@ public class AuditLogNGHandlerTest {
         JsonNode wrapped = dataNode.get("dataExport");
         Assertions.assertEquals("UNSPECIFIED", wrapped.get("channelType").asText());
         Assertions.assertEquals("string", wrapped.get("channelId").asText());
-        // Schema validated above via runAndAssertEvent
     }
 
     private ChangedAttribute mockChangedAttribute(String name, String oldValue, String newValue) {

@@ -15,7 +15,7 @@ jobs:
   #  timeout-minutes: 15
   #  steps:
   #    - name: Checkout
-  #      uses: actions/checkout@v5
+  #      uses: actions/checkout@v6
   #    - name: Scan With Black Duck
   #      uses: ./.github/actions/scan-with-blackduck
   #      with:
@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           token: ${{ secrets.GH_TOKEN }}
       - name: Update version
@@ -37,7 +37,7 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
           maven-version: ${{ env.MAVEN_VERSION }}
       - name: Upload Changed Artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: root-new-version
           path: .
@@ -51,7 +51,7 @@ jobs:
     needs: update-version
     steps:
       - name: Download artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: root-new-version
       - name: Build
@@ -67,7 +67,7 @@ jobs:
       #    sonarq-token: ${{ secrets.SONARQ_TOKEN }}
       #    github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Upload Changed Artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: root-build
           include-hidden-files: true
@@ -81,7 +81,7 @@ jobs:
     needs: [build]
     steps:
       - name: Download artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: root-build
       - name: Deploy

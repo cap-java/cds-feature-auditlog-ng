@@ -8,6 +8,7 @@ import static org.slf4j.LoggerFactory.*;
 
 import java.time.Instant;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -48,6 +49,12 @@ import com.sap.cds.services.utils.ErrorStatusException;
 
 /**
  * Handler that reacts on audit log events to log audit messages with the auditlog NG API.
+ *
+ * <p>The namespace used in the event source can be customized per-request by setting
+ * the user attribute {@value #NAMESPACE_ATTRIBUTE}. If this attribute is present and non-empty,
+ * it will be used instead of the namespace from the service binding. This allows
+ * applications with multiple commercial offerings to route audit events to different
+ * namespaces dynamically.</p>
  */
 @ServiceName(value = "*", type = AuditLogService.class)
 public class AuditLogNGHandler implements EventHandler {
@@ -55,6 +62,12 @@ public class AuditLogNGHandler implements EventHandler {
     private static final Logger LOGGER = getLogger(AuditLogNGHandler.class);
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final String LEGACY_SECURITY_WRAPPER = "legacySecurityWrapper";
+    
+    /**
+     * User attribute name for specifying a custom namespace.
+     * When set, this namespace overrides the one from the service binding.
+     */
+    static final String NAMESPACE_ATTRIBUTE = "auditlog.namespace";
 
     private final AuditLogNGCommunicator communicator;
     private final TenantProviderService tenantService;
@@ -395,12 +408,13 @@ public class AuditLogNGHandler implements EventHandler {
      *
      * The envelope includes a unique event ID, specification version, source,
      * type, and timestamp. The source is constructed using the communicator's
-     * region, namespace, and the tenant information. If the tenant is not
-     * provided in the UserInfo, the provider tenant is used.
+     * region, the resolved namespace (which may come from user attributes or the binding),
+     * and the tenant information. If the tenant is not provided in the UserInfo,
+     * the provider tenant is used.
      *
      * @param mapper the ObjectMapper used to create the JSON object node
      * @param type the type of the event to be set in the envelope
-     * @param userInfo the user information containing tenant details
+     * @param userInfo the user information containing tenant details and optional namespace override
      * @return an ObjectNode representing the event envelope
      */
     private ObjectNode buildEventEnvelope(ObjectMapper mapper, String type, UserInfo userInfo) {
@@ -408,10 +422,34 @@ public class AuditLogNGHandler implements EventHandler {
         alsEvent.put("id", UUID.randomUUID().toString());
         alsEvent.put("specversion", "1");
         String tenant = (userInfo.getTenant() == null || userInfo.getTenant().isEmpty()) ? tenantService.readProviderTenant() : userInfo.getTenant();
-        alsEvent.put("source", String.format("/%s/%s/%s", communicator.getRegion(), communicator.getNamespace(), tenant));
+        String namespace = resolveNamespace(userInfo);
+        alsEvent.put("source", String.format("/%s/%s/%s", communicator.getRegion(), namespace, tenant));
         alsEvent.put("type", type);
         alsEvent.put("time", Instant.now().toString());
         return alsEvent;
+    }
+
+    /**
+     * Resolves the namespace for the audit log event.
+     * 
+     * <p>First checks if a custom namespace is provided via the user attribute
+     * {@value #NAMESPACE_ATTRIBUTE}. If found and valid (non-empty, no whitespace-only),
+     * it will be used. Otherwise, falls back to the namespace from the service binding.</p>
+     *
+     * @param userInfo the user information containing potential custom attributes
+     * @return the namespace to use for the event source
+     */
+    private String resolveNamespace(UserInfo userInfo) {
+        List<String> namespaceValues = userInfo.getAttributeValues(NAMESPACE_ATTRIBUTE);
+        if (namespaceValues != null && !namespaceValues.isEmpty()) {
+            String customNamespace = namespaceValues.get(0);
+            if (customNamespace != null && !customNamespace.trim().isEmpty()) {
+                LOGGER.debug("Using custom namespace from user attribute '{}': {}", NAMESPACE_ATTRIBUTE, customNamespace);
+                return customNamespace.trim();
+            }
+        }
+        LOGGER.debug("No custom namespace found in user attributes, using binding namespace: {}", communicator.getNamespace());
+        return communicator.getNamespace();
     }
 
     /**

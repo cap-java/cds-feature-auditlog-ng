@@ -3,8 +3,11 @@ package com.sap.cds.feature.auditlog.ng;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+import static com.sap.cds.feature.auditlog.ng.AuditLogNGHandler.NAMESPACE_ATTRIBUTE;
+
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -292,6 +295,169 @@ public class AuditLogNGHandlerTest {
         JsonNode wrapped = dataNode.get("dataExport");
         Assertions.assertEquals("UNSPECIFIED", wrapped.get("channelType").asText());
         Assertions.assertEquals("string", wrapped.get("channelId").asText());
+    }
+
+    // --- Tests for Dynamic Namespace Resolution ---
+
+    @Test
+    public void testHandleEvent_UsesCustomNamespaceFromUserAttribute() throws Exception {
+        // Given: userInfo has custom namespace attribute
+        when(userInfo.getAttributeValues(NAMESPACE_ATTRIBUTE))
+            .thenReturn(List.of("custom-namespace"));
+        when(communicator.getRegion()).thenReturn("eu10");
+        when(communicator.getNamespace()).thenReturn("binding-namespace");
+
+        // When: handle a security event
+        SecurityLogContext context = mock(SecurityLogContext.class);
+        SecurityLog securityLog = mock(SecurityLog.class);
+        when(context.getUserInfo()).thenReturn(userInfo);
+        when(context.getData()).thenReturn(securityLog);
+        when(securityLog.getData()).thenReturn("test data");
+
+        ArgumentCaptor<ArrayNode> captor = ArgumentCaptor.forClass(ArrayNode.class);
+        handler.handleSecurityEvent(context);
+        verify(communicator).sendBulkRequest(captor.capture());
+
+        // Then: source should use custom namespace
+        JsonNode event = captor.getValue().get(0);
+        String source = event.get("source").asText();
+        assertTrue(source.contains("/custom-namespace/"),
+            "Source should contain custom namespace, but was: " + source);
+        assertFalse(source.contains("/binding-namespace/"),
+            "Source should NOT contain binding namespace");
+    }
+
+    @Test
+    public void testHandleEvent_FallsBackToBindingNamespace_WhenAttributeEmpty() throws Exception {
+        // Given: userInfo has empty namespace attribute list
+        when(userInfo.getAttributeValues(NAMESPACE_ATTRIBUTE))
+            .thenReturn(Collections.emptyList());
+        when(communicator.getRegion()).thenReturn("eu10");
+        when(communicator.getNamespace()).thenReturn("binding-namespace");
+
+        // When: handle a security event
+        SecurityLogContext context = mock(SecurityLogContext.class);
+        SecurityLog securityLog = mock(SecurityLog.class);
+        when(context.getUserInfo()).thenReturn(userInfo);
+        when(context.getData()).thenReturn(securityLog);
+        when(securityLog.getData()).thenReturn("test data");
+
+        ArgumentCaptor<ArrayNode> captor = ArgumentCaptor.forClass(ArrayNode.class);
+        handler.handleSecurityEvent(context);
+        verify(communicator).sendBulkRequest(captor.capture());
+
+        // Then: source should use binding namespace
+        JsonNode event = captor.getValue().get(0);
+        String source = event.get("source").asText();
+        assertTrue(source.contains("/binding-namespace/"),
+            "Source should contain binding namespace when attribute is empty, but was: " + source);
+    }
+
+    @Test
+    public void testHandleEvent_FallsBackToBindingNamespace_WhenAttributeNull() throws Exception {
+        // Given: userInfo returns null for namespace attribute
+        when(userInfo.getAttributeValues(NAMESPACE_ATTRIBUTE)).thenReturn(null);
+        when(communicator.getRegion()).thenReturn("eu10");
+        when(communicator.getNamespace()).thenReturn("binding-namespace");
+
+        // When: handle a security event
+        SecurityLogContext context = mock(SecurityLogContext.class);
+        SecurityLog securityLog = mock(SecurityLog.class);
+        when(context.getUserInfo()).thenReturn(userInfo);
+        when(context.getData()).thenReturn(securityLog);
+        when(securityLog.getData()).thenReturn("test data");
+
+        ArgumentCaptor<ArrayNode> captor = ArgumentCaptor.forClass(ArrayNode.class);
+        handler.handleSecurityEvent(context);
+        verify(communicator).sendBulkRequest(captor.capture());
+
+        // Then: source should use binding namespace
+        JsonNode event = captor.getValue().get(0);
+        String source = event.get("source").asText();
+        assertTrue(source.contains("/binding-namespace/"),
+            "Source should contain binding namespace when attribute is null, but was: " + source);
+    }
+
+    @Test
+    public void testHandleEvent_FallsBackToBindingNamespace_WhenAttributeValueBlank() throws Exception {
+        // Given: userInfo has whitespace-only namespace attribute
+        when(userInfo.getAttributeValues(NAMESPACE_ATTRIBUTE))
+            .thenReturn(List.of("   "));
+        when(communicator.getRegion()).thenReturn("eu10");
+        when(communicator.getNamespace()).thenReturn("binding-namespace");
+
+        // When: handle a security event
+        SecurityLogContext context = mock(SecurityLogContext.class);
+        SecurityLog securityLog = mock(SecurityLog.class);
+        when(context.getUserInfo()).thenReturn(userInfo);
+        when(context.getData()).thenReturn(securityLog);
+        when(securityLog.getData()).thenReturn("test data");
+
+        ArgumentCaptor<ArrayNode> captor = ArgumentCaptor.forClass(ArrayNode.class);
+        handler.handleSecurityEvent(context);
+        verify(communicator).sendBulkRequest(captor.capture());
+
+        // Then: source should use binding namespace (blank is treated as empty)
+        JsonNode event = captor.getValue().get(0);
+        String source = event.get("source").asText();
+        assertTrue(source.contains("/binding-namespace/"),
+            "Source should contain binding namespace when attribute is blank, but was: " + source);
+    }
+
+    @Test
+    public void testHandleEvent_TrimsCustomNamespace() throws Exception {
+        // Given: userInfo has namespace attribute with leading/trailing whitespace
+        when(userInfo.getAttributeValues(NAMESPACE_ATTRIBUTE))
+            .thenReturn(List.of("  trimmed-namespace  "));
+        when(communicator.getRegion()).thenReturn("eu10");
+        when(communicator.getNamespace()).thenReturn("binding-namespace");
+
+        // When: handle a security event
+        SecurityLogContext context = mock(SecurityLogContext.class);
+        SecurityLog securityLog = mock(SecurityLog.class);
+        when(context.getUserInfo()).thenReturn(userInfo);
+        when(context.getData()).thenReturn(securityLog);
+        when(securityLog.getData()).thenReturn("test data");
+
+        ArgumentCaptor<ArrayNode> captor = ArgumentCaptor.forClass(ArrayNode.class);
+        handler.handleSecurityEvent(context);
+        verify(communicator).sendBulkRequest(captor.capture());
+
+        // Then: source should use trimmed custom namespace
+        JsonNode event = captor.getValue().get(0);
+        String source = event.get("source").asText();
+        assertTrue(source.contains("/trimmed-namespace/"),
+            "Source should contain trimmed namespace, but was: " + source);
+        assertFalse(source.contains("  "),
+            "Source should not contain extra whitespace");
+    }
+
+    @Test
+    public void testHandleEvent_UsesFirstValueWhenMultipleProvided() throws Exception {
+        // Given: userInfo has multiple namespace values (uses first one)
+        when(userInfo.getAttributeValues(NAMESPACE_ATTRIBUTE))
+            .thenReturn(List.of("first-namespace", "second-namespace"));
+        when(communicator.getRegion()).thenReturn("eu10");
+        when(communicator.getNamespace()).thenReturn("binding-namespace");
+
+        // When: handle a security event
+        SecurityLogContext context = mock(SecurityLogContext.class);
+        SecurityLog securityLog = mock(SecurityLog.class);
+        when(context.getUserInfo()).thenReturn(userInfo);
+        when(context.getData()).thenReturn(securityLog);
+        when(securityLog.getData()).thenReturn("test data");
+
+        ArgumentCaptor<ArrayNode> captor = ArgumentCaptor.forClass(ArrayNode.class);
+        handler.handleSecurityEvent(context);
+        verify(communicator).sendBulkRequest(captor.capture());
+
+        // Then: source should use first namespace value
+        JsonNode event = captor.getValue().get(0);
+        String source = event.get("source").asText();
+        assertTrue(source.contains("/first-namespace/"),
+            "Source should contain first namespace value, but was: " + source);
+        assertFalse(source.contains("/second-namespace/"),
+            "Source should NOT contain second namespace value");
     }
 
     private ChangedAttribute mockChangedAttribute(String name, String oldValue, String newValue) {

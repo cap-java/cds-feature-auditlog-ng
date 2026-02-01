@@ -97,13 +97,17 @@ To get your project running, ensure you have the following prerequisites:
 - A user-provided service instance for SAP Audit Log service created in your Cloud Foundry space
 - The Maven dependency for `cds-feature-auditlog-ng` added to your project
 
-## Dynamic Namespace Selection
+## Dynamic Namespace Selection (Optional)
 
-By default, the namespace used in audit log events is taken from the service binding credentials. However, applications that need to route audit events to different namespaces dynamically (e.g., applications with multiple commercial offerings sharing the same deployed services) can override the namespace per-request.
+By default, the namespace used in audit log events is taken from the service binding credentials. This is sufficient for most applications.
+
+**Optional:** For applications that need to route audit events to different namespaces, the namespace can be overridden per-event using the payload.
 
 ### Payload-based Namespace
 
-Set the namespace directly in the event payload using the key `auditlog.namespace`. This approach **survives transactional outbox serialization**.
+Set the namespace directly in the event payload using the key `auditlog.namespace`. This approach **survives transactional outbox serialization**, ensuring the custom namespace is preserved even when events are processed asynchronously through the outbox.
+
+> **Important:** The key must be exactly `"auditlog.namespace"` - this string is required!
 
 #### Examples
 
@@ -150,6 +154,10 @@ The namespace is resolved in the following order:
 | No custom namespace set | Namespace from service binding |
 
 > **Note:** The custom namespace value is trimmed of leading/trailing whitespace before use.
+
+### Error Handling
+
+If you specify a custom namespace that is not registered in the SAP Audit Log service, the service will reject the event with a 403 Forbidden error. Ensure all custom namespaces are properly registered before use.
 
 ## Support, Feedback, Contributing
 

@@ -38,7 +38,6 @@ import com.sap.cds.services.auditlog.DataSubject;
 import com.sap.cds.services.auditlog.KeyValuePair;
 import com.sap.cds.services.auditlog.SecurityLog;
 import com.sap.cds.services.auditlog.SecurityLogContext;
-import com.sap.cds.services.environment.CdsProperties.Security.Mock.User;
 import com.sap.cds.services.handler.EventHandler;
 import com.sap.cds.services.handler.annotations.On;
 import com.sap.cds.services.handler.annotations.ServiceName;
@@ -417,13 +416,13 @@ public class AuditLogNGHandler implements EventHandler {
      *
      * The envelope includes a unique event ID, specification version, source,
      * type, and timestamp. The source is constructed using the communicator's
-     * region, the resolved namespace (which may come from payload, user attributes, or the binding),
+     * region, the resolved namespace (which may come from payload or the binding),
      * and the tenant information. If the tenant is not provided in the UserInfo,
      * the provider tenant is used.
      *
      * @param mapper the ObjectMapper used to create the JSON object node
      * @param type the type of the event to be set in the envelope
-     * @param userInfo the user information containing tenant details and optional namespace override
+     * @param userInfo the user information containing tenant details
      * @param payload the event payload that may contain a custom namespace, can be null
      * @return an ObjectNode representing the event envelope
      */

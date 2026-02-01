@@ -101,61 +101,62 @@ To get your project running, ensure you have the following prerequisites:
 
 By default, the namespace used in audit log events is taken from the service binding credentials. However, applications that need to route audit events to different namespaces dynamically (e.g., applications with multiple commercial offerings sharing the same deployed services) can override the namespace per-request.
 
-### How to Use
+### Recommended: Payload-based Namespace (Outbox-safe)
 
-Set the user attribute `auditlog.namespace` in the `UserInfo` object. If this attribute is present and non-empty, it will be used instead of the namespace from the service binding.
+Set the namespace directly in the event payload using the key `auditlog.namespace`. This approach **survives transactional outbox serialization** and is the recommended way to set custom namespaces.
 
-#### Example: Custom UserInfoProvider
+#### Examples
 
 ```java
-import org.springframework.stereotype.Component;
-import com.sap.cds.services.runtime.UserInfoProvider;
-import com.sap.cds.services.request.UserInfo;
-import com.sap.cds.services.request.ModifiableUserInfo;
+// Security Event
+SecurityLog securityLog = SecurityLog.create();
+securityLog.setAction("login");
+securityLog.setData("User logged in");
+securityLog.put("auditlog.namespace", "my-custom-namespace");
+auditLogService.logSecurity(securityLog);
 
-@Component
-public class CustomUserInfoProvider implements UserInfoProvider {
+// Data Access Event
+DataAccessLog dataAccessLog = DataAccessLog.create();
+dataAccessLog.setAccesses(List.of(access));
+dataAccessLog.put("auditlog.namespace", "my-custom-namespace");
+auditLogService.logDataAccess(dataAccessLog);
 
-    private UserInfoProvider defaultProvider;
+// Config Change Event
+ConfigChangeLog configChangeLog = ConfigChangeLog.create();
+configChangeLog.setConfigurations(List.of(configChange));
+configChangeLog.put("auditlog.namespace", "my-custom-namespace");
+auditLogService.logConfigChange(configChangeLog);
 
-    @Override
-    public UserInfo get() {
-        ModifiableUserInfo userInfo = UserInfo.create();
-        if (defaultProvider != null) {
-            UserInfo prevUserInfo = defaultProvider.get();
-            if (prevUserInfo != null) {
-                userInfo = prevUserInfo.copy();
-            }
-        }
-        
-        // Determine namespace based on your application context
-        String namespace = determineNamespaceForCurrentContext();
-        userInfo.setAttributeValue("auditlog.namespace", namespace);
-        
-        return userInfo;
-    }
-
-    @Override
-    public void setPrevious(UserInfoProvider prev) {
-        this.defaultProvider = prev;
-    }
-    
-    private String determineNamespaceForCurrentContext() {
-        // Your logic to determine the appropriate namespace
-        // e.g., based on subscription plan, application variant, etc.
-        return "my-custom-namespace";
-    }
-}
+// Data Modification Event
+DataModificationLog dataModificationLog = DataModificationLog.create();
+dataModificationLog.setModifications(List.of(modification));
+dataModificationLog.put("auditlog.namespace", "my-custom-namespace");
+auditLogService.logDataModification(dataModificationLog);
 ```
+
+### Deprecated: UserInfo Attribute
+
+> **Warning:** Setting the namespace via `UserInfo` attributes is **deprecated** and does **NOT work reliably** with the transactional outbox. User attributes may be lost during outbox serialization/deserialization. Please use the payload-based approach instead.
+
+The deprecated approach using `UserInfo.setAttributeValue("auditlog.namespace", namespace)` will still work for direct (non-outbox) calls, but a warning will be logged when this approach is detected.
+
+### Resolution Priority
+
+The namespace is resolved in the following order:
+
+1. **Payload** (recommended): `payload.get("auditlog.namespace")`
+2. **UserInfo attribute** (deprecated): `userInfo.getAttributeValues("auditlog.namespace")`
+3. **Service binding**: Namespace from the service binding credentials
 
 ### Behavior
 
 | Scenario | Namespace Used |
 |----------|---------------|
-| `auditlog.namespace` attribute is set with a valid value | Custom namespace from attribute |
-| `auditlog.namespace` attribute is empty or whitespace-only | Namespace from service binding |
-| `auditlog.namespace` attribute is not set | Namespace from service binding |
-| Multiple values provided in the attribute | First non-empty value is used |
+| `auditlog.namespace` set in payload | Custom namespace from payload |
+| `auditlog.namespace` set in UserInfo only | Custom namespace from UserInfo (with deprecation warning) |
+| Both payload and UserInfo set | Payload takes precedence |
+| Namespace is empty or whitespace-only | Falls back to next priority level |
+| No custom namespace set | Namespace from service binding |
 
 > **Note:** The custom namespace value is trimmed of leading/trailing whitespace before use.
 

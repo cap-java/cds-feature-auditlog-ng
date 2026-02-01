@@ -19,6 +19,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.sap.cds.CdsData;
 import com.sap.cds.services.EventContext;
 import com.sap.cds.services.auditlog.Access;
 import com.sap.cds.services.auditlog.Attachment;
@@ -64,8 +65,17 @@ public class AuditLogNGHandler implements EventHandler {
     private static final String LEGACY_SECURITY_WRAPPER = "legacySecurityWrapper";
     
     /**
-     * User attribute name for specifying a custom namespace.
-     * When set, this namespace overrides the one from the service binding.
+     * Key name for specifying a custom namespace (used in both payload and UserInfo attributes).
+     * 
+     * <p><strong>Recommended approach (outbox-safe):</strong> Set this key directly in the
+     * event payload (e.g., {@code securityLog.put("auditlog.namespace", "my-namespace")}).
+     * This approach survives transactional outbox serialization.</p>
+     * 
+     * <p><strong>Deprecated approach:</strong> Setting via UserInfo attribute does NOT work
+     * reliably with the transactional outbox as user attributes may be lost during serialization.
+     * A warning will be logged when this approach is detected.</p>
+     * 
+     * <p>Resolution priority: payload &gt; UserInfo attribute &gt; service binding</p>
      */
     static final String NAMESPACE_ATTRIBUTE = "auditlog.namespace";
 
@@ -118,7 +128,8 @@ public class AuditLogNGHandler implements EventHandler {
         Map<String, Object> data = (Map<String, Object>) context.get("data");
         String eventJson = (String) data.get("event");
 
-        ObjectNode eventEnvelope = buildEventEnvelope(OBJECT_MAPPER, eventType, userInfo);
+        // General events don't support payload-based namespace override
+        ObjectNode eventEnvelope = buildEventEnvelope(OBJECT_MAPPER, eventType, userInfo, null);
         ObjectNode metadata = buildEventMetadata(userInfo);
         ObjectNode parsedEventNode = (ObjectNode) OBJECT_MAPPER.readTree(eventJson);
         ObjectNode wrappedDataNode = OBJECT_MAPPER.createObjectNode();
@@ -158,7 +169,7 @@ public class AuditLogNGHandler implements EventHandler {
     private ArrayNode createSecurityEvent(SecurityLogContext context) {
         SecurityLog data = requireNonNull(context.getData(), "SecurityLogContext.getData() is null");
         UserInfo userInfo = requireNonNull(context.getUserInfo(), "SecurityLogContext.getUserInfo() is null");
-        ObjectNode alsEvent = buildEventEnvelope(OBJECT_MAPPER, LEGACY_SECURITY_WRAPPER, userInfo);
+        ObjectNode alsEvent = buildEventEnvelope(OBJECT_MAPPER, LEGACY_SECURITY_WRAPPER, userInfo, data);
         ObjectNode metadata = buildEventMetadata(userInfo);
         ObjectNode origEvent = createLegacySecurityOrigEvent(userInfo, data);
         ObjectNode legacySecurityWrapper = OBJECT_MAPPER.createObjectNode();
@@ -223,7 +234,7 @@ public class AuditLogNGHandler implements EventHandler {
         Collection<Access> accesses = requireNonNull(data.getAccesses(), "DataAccessLog.getAccesses() is null");
         ArrayNode eventArray = OBJECT_MAPPER.createArrayNode();
         for (Access access : accesses) {
-            addAccessEvents(userInfo, eventArray, access);
+            addAccessEvents(userInfo, eventArray, access, data);
         }
         return eventArray;
     }
@@ -236,13 +247,14 @@ public class AuditLogNGHandler implements EventHandler {
      * @param userInfo   the user information associated with the access event
      * @param eventArray the array to which access events will be added
      * @param access     the access object containing the attributes to process
+     * @param payload    the event payload that may contain a custom namespace
      * @throws NullPointerException if {@code access.getAttributes()} or any attribute name is {@code null}
      */
-    private void addAccessEvents(UserInfo userInfo, ArrayNode eventArray, Access access) {
+    private void addAccessEvents(UserInfo userInfo, ArrayNode eventArray, Access access, CdsData payload) {
         Collection<Attribute> attributes = requireNonNull(access.getAttributes(), "Access.getAttributes() is null");
         for (Attribute attribute : attributes) {
             String attributeName = requireNonNull(attribute.getName(), "Attribute.getName() is null");
-            addAttributeAccessEvents(userInfo, eventArray, access, attributeName);
+            addAttributeAccessEvents(userInfo, eventArray, access, attributeName, payload);
         }
     }
 
@@ -255,15 +267,16 @@ public class AuditLogNGHandler implements EventHandler {
      * @param eventArray    the JSON array node to which the generated events will be added
      * @param access        the access object containing details about the attribute access and any attachments
      * @param attributeName the name of the attribute being accessed
+     * @param payload       the event payload that may contain a custom namespace
      */
-    private void addAttributeAccessEvents(UserInfo userInfo, ArrayNode eventArray, Access access, String attributeName) {
+    private void addAttributeAccessEvents(UserInfo userInfo, ArrayNode eventArray, Access access, String attributeName, CdsData payload) {
         Collection<Attachment> attachments = access.getAttachments();
         if (attachments == null || attachments.isEmpty()) {
-            ObjectNode alsEvent = buildDataAccessAlsEvent(userInfo, access, attributeName, null, null);
+            ObjectNode alsEvent = buildDataAccessAlsEvent(userInfo, access, attributeName, null, null, payload);
             eventArray.add(alsEvent);
         } else {
             for (Attachment attachment : attachments) {
-                ObjectNode alsEvent = buildDataAccessAlsEvent(userInfo, access, attributeName, attachment.getName(), attachment.getId());
+                ObjectNode alsEvent = buildDataAccessAlsEvent(userInfo, access, attributeName, attachment.getName(), attachment.getId(), payload);
                 eventArray.add(alsEvent);
             }
         }
@@ -292,7 +305,7 @@ public class AuditLogNGHandler implements EventHandler {
         ArrayNode result = OBJECT_MAPPER.createArrayNode();
         configChanges.forEach(cfg -> {
             Collection<ChangedAttribute> attributes = requireNonNull(cfg.getAttributes(), "ConfigChange.getAttributes() is null");
-            attributes.stream().map(attribute -> buildConfigChangeEvent(userInfo, cfg, attribute)).forEach(result::add);
+            attributes.stream().map(attribute -> buildConfigChangeEvent(userInfo, cfg, attribute, data)).forEach(result::add);
         });
         return result;
     }
@@ -302,18 +315,19 @@ public class AuditLogNGHandler implements EventHandler {
      * This method constructs an ObjectNode representing an audit log event for a configuration change,
      * including metadata, details about the changed attribute, and information about the affected data object.
      *
-     * @param context   the context containing user and request information for the configuration change
+     * @param userInfo  the user information for the configuration change
      * @param cfg       the configuration change object containing details about the change
      * @param attribute the specific attribute that was changed
+     * @param payload   the event payload that may contain a custom namespace
      * @return an ObjectNode representing the audit log event for the configuration change
      */
-    private ObjectNode buildConfigChangeEvent(UserInfo userInfo, ConfigChange configChanges, ChangedAttribute attribute) {
+    private ObjectNode buildConfigChangeEvent(UserInfo userInfo, ConfigChange configChanges, ChangedAttribute attribute, CdsData payload) {
         ObjectNode metadata = buildEventMetadata(userInfo);
         ObjectNode changeNode = OBJECT_MAPPER.createObjectNode();
         addValueDetails(changeNode, attribute, "propertyName");
         var dataObject = requireNonNull(configChanges.getDataObject(), "ConfigChange.getDataObject() is null");
         addObjectDetails(changeNode, dataObject);
-        return buildAlsEvent("configurationChange", userInfo, metadata, "configurationChange", changeNode);
+        return buildAlsEvent("configurationChange", userInfo, metadata, "configurationChange", changeNode, payload);
     }
 
     public void handleDataModificationEvent(DataModificationLogContext context) throws JsonProcessingException {
@@ -335,7 +349,7 @@ public class AuditLogNGHandler implements EventHandler {
         DataModificationLog data = requireNonNull(context.getData(), "DataModificationLogContext.getData() is null");
         Collection<DataModification> modifications = requireNonNull(data.getModifications(), "DataModificationLog.getModifications() is null");
         UserInfo userInfo = requireNonNull(context.getUserInfo(), "DataModificationLogContext.getUserInfo() is null");
-        return buildAttributeBasedAlsEvents(userInfo, modifications);
+        return buildAttributeBasedAlsEvents(userInfo, modifications, data);
     }
 
     /**
@@ -343,17 +357,18 @@ public class AuditLogNGHandler implements EventHandler {
      * For each {@link DataModification} in the provided collection, this method iterates through its changed attributes
      * and creates an ALS event for each attribute using {@code buildDataModificationAlsEvent}.
      *
-     * @param context the context of the data modification log, containing relevant metadata for event creation
-     * @param items a collection of {@link DataModification} objects to process
+     * @param userInfo the user information for the events
+     * @param modifications a collection of {@link DataModification} objects to process
+     * @param payload the event payload that may contain a custom namespace
      * @return an {@link ArrayNode} containing the generated ALS events for each changed attribute
      * @throws IllegalArgumentException if any {@link DataModification} item has no attributes
      */
-    private ArrayNode buildAttributeBasedAlsEvents(UserInfo userInfo, Collection<DataModification> modifications) {
+    private ArrayNode buildAttributeBasedAlsEvents(UserInfo userInfo, Collection<DataModification> modifications, CdsData payload) {
         ArrayNode eventArray = OBJECT_MAPPER.createArrayNode();
         for (DataModification modification : modifications) {
             Collection<ChangedAttribute> attributes = requireNonNull(modification.getAttributes(), "DataModification.getAttributes() is null");
             for (ChangedAttribute attribute : attributes) {
-                eventArray.add(buildDataModificationAlsEvent(userInfo, modification, attribute));
+                eventArray.add(buildDataModificationAlsEvent(userInfo, modification, attribute, payload));
             }
         }
         return eventArray;
@@ -364,16 +379,17 @@ public class AuditLogNGHandler implements EventHandler {
      * This method constructs an ObjectNode representing a data modification event,
      * including relevant metadata, object and subject information, and changed attribute details.
      *
-     * @param context the context of the data modification log, containing user and request information
+     * @param userInfo the user information for the event
      * @param modification the data modification details, including the affected data object and subject
      * @param attribute the specific attribute that was changed during the modification
+     * @param payload the event payload that may contain a custom namespace
      * @return an ObjectNode representing the constructed ALS event for the data modification
      */
-    private ObjectNode buildDataModificationAlsEvent(UserInfo userInfo, DataModification modification, ChangedAttribute attribute) {
+    private ObjectNode buildDataModificationAlsEvent(UserInfo userInfo, DataModification modification, ChangedAttribute attribute, CdsData payload) {
         DataObject dataObject = requireNonNull(modification.getDataObject(), "DataModification.getDataObject() is null");
         ObjectNode metadata = buildEventMetadata(userInfo);
         ObjectNode dataModificationNode = buildDataModificationNode(attribute, modification.getDataSubject(), dataObject);
-        return buildAlsEvent("dppDataModification", userInfo, metadata, "dppDataModification", dataModificationNode);
+        return buildAlsEvent("dppDataModification", userInfo, metadata, "dppDataModification", dataModificationNode, payload);
     }
 
     /**
@@ -408,21 +424,22 @@ public class AuditLogNGHandler implements EventHandler {
      *
      * The envelope includes a unique event ID, specification version, source,
      * type, and timestamp. The source is constructed using the communicator's
-     * region, the resolved namespace (which may come from user attributes or the binding),
+     * region, the resolved namespace (which may come from payload, user attributes, or the binding),
      * and the tenant information. If the tenant is not provided in the UserInfo,
      * the provider tenant is used.
      *
      * @param mapper the ObjectMapper used to create the JSON object node
      * @param type the type of the event to be set in the envelope
      * @param userInfo the user information containing tenant details and optional namespace override
+     * @param payload the event payload that may contain a custom namespace, can be null
      * @return an ObjectNode representing the event envelope
      */
-    private ObjectNode buildEventEnvelope(ObjectMapper mapper, String type, UserInfo userInfo) {
+    private ObjectNode buildEventEnvelope(ObjectMapper mapper, String type, UserInfo userInfo, CdsData payload) {
         ObjectNode alsEvent = mapper.createObjectNode();
         alsEvent.put("id", UUID.randomUUID().toString());
         alsEvent.put("specversion", "1");
         String tenant = (userInfo.getTenant() == null || userInfo.getTenant().isEmpty()) ? tenantService.readProviderTenant() : userInfo.getTenant();
-        String namespace = resolveNamespace(userInfo);
+        String namespace = resolveNamespace(userInfo, payload); 
         alsEvent.put("source", String.format("/%s/%s/%s", communicator.getRegion(), namespace, tenant));
         alsEvent.put("type", type);
         alsEvent.put("time", Instant.now().toString());
@@ -432,23 +449,45 @@ public class AuditLogNGHandler implements EventHandler {
     /**
      * Resolves the namespace for the audit log event.
      * 
-     * <p>First checks if a custom namespace is provided via the user attribute
-     * {@value #NAMESPACE_ATTRIBUTE}. If found and valid (non-empty, no whitespace-only),
-     * it will be used. Otherwise, falls back to the namespace from the service binding.</p>
+     * <p>Resolution priority:</p>
+     * <ol>
+     *   <li><strong>Payload (recommended):</strong> Checks if namespace is set in the event payload
+     *       via {@code payload.get("auditlog.namespace")}. This approach survives outbox serialization.</li>
+     *   <li><strong>UserInfo attribute (deprecated):</strong> Falls back to checking the user attribute
+     *       {@value #NAMESPACE_ATTRIBUTE}. A warning is logged as this approach does not work reliably
+     *       with the transactional outbox.</li>
+     *   <li><strong>Service binding:</strong> Falls back to the namespace from the service binding.</li>
+     * </ol>
      *
      * @param userInfo the user information containing potential custom attributes
+     * @param payload the event payload (CdsData) that may contain a custom namespace, can be null
      * @return the namespace to use for the event source
      */
-    private String resolveNamespace(UserInfo userInfo) {
+    private String resolveNamespace(UserInfo userInfo, CdsData payload) {
+        // Priority 1: Check payload (outbox-safe approach)
+        if (payload != null) {
+            Object namespaceFromPayload = payload.get(NAMESPACE_ATTRIBUTE);
+            if (namespaceFromPayload instanceof String ns && !ns.trim().isEmpty()) {
+                LOGGER.debug("Using custom namespace from payload '{}': {}", NAMESPACE_ATTRIBUTE, ns.trim());
+                return ns.trim();
+            }
+        }
+        
+        // Priority 2: Check UserInfo attributes (deprecated, doesn't survive outbox reliably)
         List<String> namespaceValues = userInfo.getAttributeValues(NAMESPACE_ATTRIBUTE);
         if (namespaceValues != null && !namespaceValues.isEmpty()) {
             String customNamespace = namespaceValues.get(0);
             if (customNamespace != null && !customNamespace.trim().isEmpty()) {
-                LOGGER.debug("Using custom namespace from user attribute '{}': {}", NAMESPACE_ATTRIBUTE, customNamespace);
+                LOGGER.warn("Using namespace from UserInfo attribute '{}'. " +
+                    "This approach is DEPRECATED and may NOT work with the transactional outbox. " +
+                    "Please set the namespace in the event payload instead (e.g., payload.put(\"{}\", \"my-namespace\")).", 
+                    NAMESPACE_ATTRIBUTE, NAMESPACE_ATTRIBUTE);
                 return customNamespace.trim();
             }
         }
-        LOGGER.debug("No custom namespace found in user attributes, using binding namespace: {}", communicator.getNamespace());
+        
+        // Priority 3: Fall back to binding namespace
+        LOGGER.debug("No custom namespace found, using binding namespace: {}", communicator.getNamespace());
         return communicator.getNamespace();
     }
 
@@ -473,17 +512,18 @@ public class AuditLogNGHandler implements EventHandler {
     /**
      * Builds an ALS (Audit Logging Service) event for data access operations.
      *
-     * @param context        the context containing user and request information for the data access event
+     * @param userInfo       the user information for the event
      * @param access         the type of access performed (e.g., READ, WRITE)
      * @param attribute      the specific attribute or field being accessed
      * @param attachmentType the type of attachment associated with the access, if any
      * @param attachmentId   the identifier of the attachment, if applicable
+     * @param payload        the event payload that may contain a custom namespace
      * @return an {@link ObjectNode} representing the constructed ALS event for data access
      */
-    private ObjectNode buildDataAccessAlsEvent(UserInfo userInfo, Access access, String attribute, String attachmentType, String attachmentId) {
+    private ObjectNode buildDataAccessAlsEvent(UserInfo userInfo, Access access, String attribute, String attachmentType, String attachmentId, CdsData payload) {
         ObjectNode metadata = buildEventMetadata(userInfo);
         ObjectNode dataAccessNode = buildDataAccessNode(access, attribute, attachmentType, attachmentId);
-        return buildAlsEvent("dppDataAccess", userInfo, metadata, "dppDataAccess", dataAccessNode);
+        return buildAlsEvent("dppDataAccess", userInfo, metadata, "dppDataAccess", dataAccessNode, payload);
     }
 
     /**
@@ -574,10 +614,11 @@ public class AuditLogNGHandler implements EventHandler {
      * @param metadata the metadata node containing timestamp and other event-specific details
      * @param dataKey the key representing the type of data in the event, e.g., "dppDataAccess"
      * @param dataValue the value node containing the event-specific data
+     * @param payload the event payload that may contain a custom namespace, can be null
      * @return an ObjectNode representing the ALS event
      */
-    private ObjectNode buildAlsEvent(String eventType, UserInfo userInfo, ObjectNode metadata, String dataKey, ObjectNode dataValue) {
-        ObjectNode alsEvent = buildEventEnvelope(OBJECT_MAPPER, eventType, userInfo);
+    private ObjectNode buildAlsEvent(String eventType, UserInfo userInfo, ObjectNode metadata, String dataKey, ObjectNode dataValue, CdsData payload) {
+        ObjectNode alsEvent = buildEventEnvelope(OBJECT_MAPPER, eventType, userInfo, payload);
         ObjectNode dataNode = OBJECT_MAPPER.createObjectNode();
         dataNode.set(dataKey, dataValue);
         ObjectNode alsData = buildAuditLogEventData(metadata, dataNode);

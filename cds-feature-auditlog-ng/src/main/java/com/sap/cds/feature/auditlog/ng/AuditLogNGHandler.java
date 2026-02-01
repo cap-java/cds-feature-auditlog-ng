@@ -8,7 +8,6 @@ import static org.slf4j.LoggerFactory.*;
 
 import java.time.Instant;
 import java.util.Collection;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -52,10 +51,8 @@ import com.sap.cds.services.utils.ErrorStatusException;
  * Handler that reacts on audit log events to log audit messages with the auditlog NG API.
  *
  * <p>The namespace used in the event source can be customized per-request by setting
- * the user attribute {@value #NAMESPACE_ATTRIBUTE}. If this attribute is present and non-empty,
- * it will be used instead of the namespace from the service binding. This allows
- * applications with multiple commercial offerings to route audit events to different
- * namespaces dynamically.</p>
+ * the {@value #NAMESPACE_ATTRIBUTE} key in the event payload. This allows applications
+ * with multiple commercial offerings to route audit events to different namespaces dynamically.</p>
  */
 @ServiceName(value = "*", type = AuditLogService.class)
 public class AuditLogNGHandler implements EventHandler {
@@ -65,17 +62,13 @@ public class AuditLogNGHandler implements EventHandler {
     private static final String LEGACY_SECURITY_WRAPPER = "legacySecurityWrapper";
     
     /**
-     * Key name for specifying a custom namespace (used in both payload and UserInfo attributes).
+     * Key name for specifying a custom namespace in the event payload.
      * 
-     * <p><strong>Recommended approach (outbox-safe):</strong> Set this key directly in the
-     * event payload (e.g., {@code securityLog.put("auditlog.namespace", "my-namespace")}).
+     * <p>Set this key directly in the event payload 
+     * (e.g., {@code securityLog.put("auditlog.namespace", "my-namespace")}).
      * This approach survives transactional outbox serialization.</p>
      * 
-     * <p><strong>Deprecated approach:</strong> Setting via UserInfo attribute does NOT work
-     * reliably with the transactional outbox as user attributes may be lost during serialization.
-     * A warning will be logged when this approach is detected.</p>
-     * 
-     * <p>Resolution priority: payload &gt; UserInfo attribute &gt; service binding</p>
+     * <p>Resolution priority: payload &gt; service binding</p>
      */
     static final String NAMESPACE_ATTRIBUTE = "auditlog.namespace";
 
@@ -451,20 +444,17 @@ public class AuditLogNGHandler implements EventHandler {
      * 
      * <p>Resolution priority:</p>
      * <ol>
-     *   <li><strong>Payload (recommended):</strong> Checks if namespace is set in the event payload
+     *   <li><strong>Payload:</strong> Checks if namespace is set in the event payload
      *       via {@code payload.get("auditlog.namespace")}. This approach survives outbox serialization.</li>
-     *   <li><strong>UserInfo attribute (deprecated):</strong> Falls back to checking the user attribute
-     *       {@value #NAMESPACE_ATTRIBUTE}. A warning is logged as this approach does not work reliably
-     *       with the transactional outbox.</li>
      *   <li><strong>Service binding:</strong> Falls back to the namespace from the service binding.</li>
      * </ol>
      *
-     * @param userInfo the user information containing potential custom attributes
+     * @param userInfo the user information (kept for API compatibility)
      * @param payload the event payload (CdsData) that may contain a custom namespace, can be null
      * @return the namespace to use for the event source
      */
     private String resolveNamespace(UserInfo userInfo, CdsData payload) {
-        // Priority 1: Check payload (outbox-safe approach)
+        // Check payload for custom namespace (outbox-safe approach)
         if (payload != null) {
             Object namespaceFromPayload = payload.get(NAMESPACE_ATTRIBUTE);
             if (namespaceFromPayload instanceof String ns && !ns.trim().isEmpty()) {
@@ -473,20 +463,7 @@ public class AuditLogNGHandler implements EventHandler {
             }
         }
         
-        // Priority 2: Check UserInfo attributes (deprecated, doesn't survive outbox reliably)
-        List<String> namespaceValues = userInfo.getAttributeValues(NAMESPACE_ATTRIBUTE);
-        if (namespaceValues != null && !namespaceValues.isEmpty()) {
-            String customNamespace = namespaceValues.get(0);
-            if (customNamespace != null && !customNamespace.trim().isEmpty()) {
-                LOGGER.warn("Using namespace from UserInfo attribute '{}'. " +
-                    "This approach is DEPRECATED and may NOT work with the transactional outbox. " +
-                    "Please set the namespace in the event payload instead (e.g., payload.put(\"{}\", \"my-namespace\")).", 
-                    NAMESPACE_ATTRIBUTE, NAMESPACE_ATTRIBUTE);
-                return customNamespace.trim();
-            }
-        }
-        
-        // Priority 3: Fall back to binding namespace
+        // Fall back to binding namespace
         LOGGER.debug("No custom namespace found, using binding namespace: {}", communicator.getNamespace());
         return communicator.getNamespace();
     }

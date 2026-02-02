@@ -50,8 +50,10 @@ import com.sap.cds.services.utils.ErrorStatusException;
  * Handler that reacts on audit log events to log audit messages with the auditlog NG API.
  *
  * <p>The namespace used in the event source can be customized per-request by setting
- * the {@value #NAMESPACE_ATTRIBUTE} key in the event payload. This allows applications
+ * the {@link AuditLogNG#NAMESPACE_ATTRIBUTE} key in the event payload. This allows applications
  * with multiple commercial offerings to route audit events to different namespaces dynamically.</p>
+ * 
+ * @see AuditLogNG#NAMESPACE_ATTRIBUTE
  */
 @ServiceName(value = "*", type = AuditLogService.class)
 public class AuditLogNGHandler implements EventHandler {
@@ -59,17 +61,6 @@ public class AuditLogNGHandler implements EventHandler {
     private static final Logger LOGGER = getLogger(AuditLogNGHandler.class);
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final String LEGACY_SECURITY_WRAPPER = "legacySecurityWrapper";
-    
-    /**
-     * Key name for specifying a custom namespace in the event payload.
-     * 
-     * <p>Set this key directly in the event payload 
-     * (e.g., {@code securityLog.put("auditlog.namespace", "my-namespace")}).
-     * This approach survives transactional outbox serialization.</p>
-     * 
-     * <p>Resolution priority: payload &gt; service binding</p>
-     */
-    static final String NAMESPACE_ATTRIBUTE = "auditlog.namespace";
 
     private final AuditLogNGCommunicator communicator;
     private final TenantProviderService tenantService;
@@ -455,9 +446,9 @@ public class AuditLogNGHandler implements EventHandler {
     private String resolveNamespace(UserInfo userInfo, CdsData payload) {
         // Check payload for custom namespace (outbox-safe approach)
         if (payload != null) {
-            Object namespaceFromPayload = payload.get(NAMESPACE_ATTRIBUTE);
+            Object namespaceFromPayload = payload.get(AuditLogNG.NAMESPACE_ATTRIBUTE);
             if (namespaceFromPayload instanceof String ns && !ns.trim().isEmpty()) {
-                LOGGER.debug("Using custom namespace from payload '{}': {}", NAMESPACE_ATTRIBUTE, ns.trim());
+                LOGGER.debug("Using custom namespace from payload '{}': {}", AuditLogNG.NAMESPACE_ATTRIBUTE, ns.trim());
                 return ns.trim();
             }
         }

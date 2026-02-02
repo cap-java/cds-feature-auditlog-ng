@@ -107,7 +107,7 @@ By default, the namespace used in audit log events is taken from the service bin
 
 Set the namespace directly in the event payload using the key `auditlog.namespace`. This approach **survives transactional outbox serialization**, ensuring the custom namespace is preserved even when events are processed asynchronously through the outbox.
 
-> **Important:** The key must be exactly `"auditlog.namespace"` - this string is required!
+> **Important:** The key must be exactly `"auditlog.namespace"`. You can also use the constant `AuditLogNG.NAMESPACE_ATTRIBUTE`.
 
 #### Examples
 

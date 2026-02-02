@@ -3,7 +3,7 @@ package com.sap.cds.feature.auditlog.ng;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-import static com.sap.cds.feature.auditlog.ng.AuditLogNGHandler.NAMESPACE_ATTRIBUTE;
+import static com.sap.cds.feature.auditlog.ng.AuditLogNG.NAMESPACE_ATTRIBUTE;
 
 import java.io.File;
 import java.util.ArrayList;

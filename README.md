@@ -97,6 +97,68 @@ To get your project running, ensure you have the following prerequisites:
 - A user-provided service instance for SAP Audit Log service created in your Cloud Foundry space
 - The Maven dependency for `cds-feature-auditlog-ng` added to your project
 
+## Dynamic Namespace Selection (Optional)
+
+By default, the namespace used in audit log events is taken from the service binding credentials. This is sufficient for most applications.
+
+**Optional:** For applications that need to route audit events to different namespaces, the namespace can be overridden per-event using the payload.
+
+### Payload-based Namespace
+
+Set the namespace directly in the event payload using the key `auditlog.namespace`. This approach **survives transactional outbox serialization**, ensuring the custom namespace is preserved even when events are processed asynchronously through the outbox.
+
+> **Important:** The key must be exactly `"auditlog.namespace"`. You can also use the constant `AuditLogNG.NAMESPACE_ATTRIBUTE`.
+
+#### Examples
+
+```java
+// Security Event
+SecurityLog securityLog = SecurityLog.create();
+securityLog.setAction("login");
+securityLog.setData("User logged in");
+securityLog.put("auditlog.namespace", "my-custom-namespace");
+auditLogService.logSecurity(securityLog);
+
+// Data Access Event
+DataAccessLog dataAccessLog = DataAccessLog.create();
+dataAccessLog.setAccesses(List.of(access));
+dataAccessLog.put("auditlog.namespace", "my-custom-namespace");
+auditLogService.logDataAccess(dataAccessLog);
+
+// Config Change Event
+ConfigChangeLog configChangeLog = ConfigChangeLog.create();
+configChangeLog.setConfigurations(List.of(configChange));
+configChangeLog.put("auditlog.namespace", "my-custom-namespace");
+auditLogService.logConfigChange(configChangeLog);
+
+// Data Modification Event
+DataModificationLog dataModificationLog = DataModificationLog.create();
+dataModificationLog.setModifications(List.of(modification));
+dataModificationLog.put("auditlog.namespace", "my-custom-namespace");
+auditLogService.logDataModification(dataModificationLog);
+```
+
+### Resolution Priority
+
+The namespace is resolved in the following order:
+
+1. **Payload**: `payload.get("auditlog.namespace")`
+2. **Service binding**: Namespace from the service binding credentials
+
+### Behavior
+
+| Scenario | Namespace Used |
+|----------|---------------|
+| `auditlog.namespace` set in payload | Custom namespace from payload |
+| Namespace is empty or whitespace-only | Falls back to service binding |
+| No custom namespace set | Namespace from service binding |
+
+> **Note:** The custom namespace value is trimmed of leading/trailing whitespace before use.
+
+### Error Handling
+
+If you specify a custom namespace that is not registered in the SAP Audit Log service, the service will reject the event with a 403 Forbidden error. Ensure all custom namespaces are properly registered before use.
+
 ## Support, Feedback, Contributing
 
 This project is open to feature requests/suggestions, bug reports etc. via [GitHub issues](https://github.com/cap-java/cds-feature-auditlog-ng/issues). Contribution and feedback are encouraged and always welcome. For more information about how to contribute, the project structure, as well as additional contribution information, see our [Contribution Guidelines](CONTRIBUTING.md).

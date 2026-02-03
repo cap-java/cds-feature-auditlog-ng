@@ -3,6 +3,8 @@ package com.sap.cds.feature.auditlog.ng;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+import static com.sap.cds.feature.auditlog.ng.AuditLogNG.NAMESPACE_ATTRIBUTE;
+
 import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -292,6 +294,224 @@ public class AuditLogNGHandlerTest {
         JsonNode wrapped = dataNode.get("dataExport");
         Assertions.assertEquals("UNSPECIFIED", wrapped.get("channelType").asText());
         Assertions.assertEquals("string", wrapped.get("channelId").asText());
+    }
+
+    // --- Tests for Payload-based Namespace ---
+
+    @Test
+    public void testSecurityLog_UsesNamespaceFromPayload() throws Exception {
+        // Given: SecurityLog payload has custom namespace
+        when(communicator.getRegion()).thenReturn("eu10");
+        when(communicator.getNamespace()).thenReturn("binding-namespace");
+
+        SecurityLogContext context = mock(SecurityLogContext.class);
+        SecurityLog securityLog = mock(SecurityLog.class);
+        when(context.getUserInfo()).thenReturn(userInfo);
+        when(context.getData()).thenReturn(securityLog);
+        when(securityLog.getData()).thenReturn("test data");
+        when(securityLog.get(NAMESPACE_ATTRIBUTE)).thenReturn("payload-namespace");
+
+        ArgumentCaptor<ArrayNode> captor = ArgumentCaptor.forClass(ArrayNode.class);
+        handler.handleSecurityEvent(context);
+        verify(communicator).sendBulkRequest(captor.capture());
+
+        // Then: source should use namespace from payload
+        JsonNode event = captor.getValue().get(0);
+        String source = event.get("source").asText();
+        assertTrue(source.contains("/payload-namespace/"),
+            "Source should contain payload namespace, but was: " + source);
+    }
+
+    @Test
+    public void testDataAccessLog_UsesNamespaceFromPayload() throws Exception {
+        // Given: DataAccessLog payload has custom namespace
+        when(communicator.getRegion()).thenReturn("eu10");
+        when(communicator.getNamespace()).thenReturn("binding-namespace");
+
+        DataAccessLogContext context = mock(DataAccessLogContext.class);
+        DataAccessLog dataAccessLog = mock(DataAccessLog.class);
+        KeyValuePair id = mockKeyValuePair("userId", "user-1");
+        DataObject dataObject = mockDataObject("User", List.of(id));
+        DataSubject dataSubject = mockDataSubject("Person", List.of(id));
+        Attribute attr = mockAttribute("email");
+        Access access = mock(Access.class);
+        when(access.getDataObject()).thenReturn(dataObject);
+        when(access.getDataSubject()).thenReturn(dataSubject);
+        when(access.getAttributes()).thenReturn(List.of(attr));
+
+        when(dataAccessLog.getAccesses()).thenReturn(List.of(access));
+        when(dataAccessLog.get(NAMESPACE_ATTRIBUTE)).thenReturn("payload-namespace");
+        when(context.getData()).thenReturn(dataAccessLog);
+        when(context.getUserInfo()).thenReturn(userInfo);
+
+        ArgumentCaptor<ArrayNode> captor = ArgumentCaptor.forClass(ArrayNode.class);
+        handler.handleDataAccessEvent(context);
+        verify(communicator).sendBulkRequest(captor.capture());
+
+        // Then: source should use namespace from payload
+        JsonNode event = captor.getValue().get(0);
+        String source = event.get("source").asText();
+        assertTrue(source.contains("/payload-namespace/"),
+            "Source should contain payload namespace, but was: " + source);
+    }
+
+    @Test
+    public void testConfigChangeLog_UsesNamespaceFromPayload() throws Exception {
+        // Given: ConfigChangeLog payload has custom namespace
+        when(communicator.getRegion()).thenReturn("eu10");
+        when(communicator.getNamespace()).thenReturn("binding-namespace");
+
+        ConfigChangeLogContext context = mock(ConfigChangeLogContext.class);
+        ConfigChangeLog configChangeLog = mock(ConfigChangeLog.class);
+        ChangedAttribute attr = mockChangedAttribute("logLevel", "INFO", "DEBUG");
+        KeyValuePair id = mockKeyValuePair("appId", "app-1");
+        DataObject dataObject = mockDataObject("AppConfig", List.of(id));
+        ConfigChange config = mockConfigChange(List.of(attr), dataObject);
+
+        when(configChangeLog.getConfigurations()).thenReturn(List.of(config));
+        when(configChangeLog.get(NAMESPACE_ATTRIBUTE)).thenReturn("payload-namespace");
+        when(context.getData()).thenReturn(configChangeLog);
+        when(context.getUserInfo()).thenReturn(userInfo);
+
+        ArgumentCaptor<ArrayNode> captor = ArgumentCaptor.forClass(ArrayNode.class);
+        handler.handleConfigChangeEvent(context);
+        verify(communicator).sendBulkRequest(captor.capture());
+
+        // Then: source should use namespace from payload
+        JsonNode event = captor.getValue().get(0);
+        String source = event.get("source").asText();
+        assertTrue(source.contains("/payload-namespace/"),
+            "Source should contain payload namespace, but was: " + source);
+    }
+
+    @Test
+    public void testDataModificationLog_UsesNamespaceFromPayload() throws Exception {
+        // Given: DataModificationLog payload has custom namespace
+        when(communicator.getRegion()).thenReturn("eu10");
+        when(communicator.getNamespace()).thenReturn("binding-namespace");
+
+        DataModificationLogContext context = mock(DataModificationLogContext.class);
+        DataModificationLog dataModificationLog = mock(DataModificationLog.class);
+        ChangedAttribute attr = mockChangedAttribute("email", "old@example.com", "new@example.com");
+        KeyValuePair id = mockKeyValuePair("userId", "user-1");
+        DataObject dataObject = mockDataObject("User", List.of(id));
+        DataSubject dataSubject = mockDataSubject("Person", List.of(id));
+        DataModification modification = mockDataModification(List.of(attr), dataObject, dataSubject);
+
+        when(dataModificationLog.getModifications()).thenReturn(List.of(modification));
+        when(dataModificationLog.get(NAMESPACE_ATTRIBUTE)).thenReturn("payload-namespace");
+        when(context.getData()).thenReturn(dataModificationLog);
+        when(context.getUserInfo()).thenReturn(userInfo);
+
+        ArgumentCaptor<ArrayNode> captor = ArgumentCaptor.forClass(ArrayNode.class);
+        handler.handleDataModificationEvent(context);
+        verify(communicator).sendBulkRequest(captor.capture());
+
+        // Then: source should use namespace from payload
+        JsonNode event = captor.getValue().get(0);
+        String source = event.get("source").asText();
+        assertTrue(source.contains("/payload-namespace/"),
+            "Source should contain payload namespace, but was: " + source);
+    }
+
+    @Test
+    public void testPayloadNamespace_TakesPrecedence_OverBindingNamespace() throws Exception {
+        // Given: Both payload and binding have namespace
+        when(communicator.getRegion()).thenReturn("eu10");
+        when(communicator.getNamespace()).thenReturn("binding-namespace");
+
+        SecurityLogContext context = mock(SecurityLogContext.class);
+        SecurityLog securityLog = mock(SecurityLog.class);
+        when(context.getUserInfo()).thenReturn(userInfo);
+        when(context.getData()).thenReturn(securityLog);
+        when(securityLog.getData()).thenReturn("test data");
+        when(securityLog.get(NAMESPACE_ATTRIBUTE)).thenReturn("payload-namespace");
+
+        ArgumentCaptor<ArrayNode> captor = ArgumentCaptor.forClass(ArrayNode.class);
+        handler.handleSecurityEvent(context);
+        verify(communicator).sendBulkRequest(captor.capture());
+
+        // Then: payload namespace takes precedence over binding
+        JsonNode event = captor.getValue().get(0);
+        String source = event.get("source").asText();
+        assertTrue(source.contains("/payload-namespace/"),
+            "Source should use payload namespace (higher priority), but was: " + source);
+        assertFalse(source.contains("/binding-namespace/"),
+            "Source should NOT use binding namespace when payload is set");
+    }
+
+    @Test
+    public void testPayloadNamespace_TrimsWhitespace() throws Exception {
+        // Given: payload has namespace with leading/trailing whitespace
+        when(communicator.getRegion()).thenReturn("eu10");
+        when(communicator.getNamespace()).thenReturn("binding-namespace");
+
+        SecurityLogContext context = mock(SecurityLogContext.class);
+        SecurityLog securityLog = mock(SecurityLog.class);
+        when(context.getUserInfo()).thenReturn(userInfo);
+        when(context.getData()).thenReturn(securityLog);
+        when(securityLog.getData()).thenReturn("test data");
+        when(securityLog.get(NAMESPACE_ATTRIBUTE)).thenReturn("  trimmed-namespace  ");
+
+        ArgumentCaptor<ArrayNode> captor = ArgumentCaptor.forClass(ArrayNode.class);
+        handler.handleSecurityEvent(context);
+        verify(communicator).sendBulkRequest(captor.capture());
+
+        // Then: namespace should be trimmed
+        JsonNode event = captor.getValue().get(0);
+        String source = event.get("source").asText();
+        assertTrue(source.contains("/trimmed-namespace/"),
+            "Source should contain trimmed namespace, but was: " + source);
+        assertFalse(source.contains("  "),
+            "Source should not contain whitespace");
+    }
+
+    @Test
+    public void testPayloadNamespace_FallsBackToBinding_WhenPayloadEmpty() throws Exception {
+        // Given: payload namespace is empty/whitespace string
+        when(communicator.getRegion()).thenReturn("eu10");
+        when(communicator.getNamespace()).thenReturn("binding-namespace");
+
+        SecurityLogContext context = mock(SecurityLogContext.class);
+        SecurityLog securityLog = mock(SecurityLog.class);
+        when(context.getUserInfo()).thenReturn(userInfo);
+        when(context.getData()).thenReturn(securityLog);
+        when(securityLog.getData()).thenReturn("test data");
+        when(securityLog.get(NAMESPACE_ATTRIBUTE)).thenReturn("   ");
+
+        ArgumentCaptor<ArrayNode> captor = ArgumentCaptor.forClass(ArrayNode.class);
+        handler.handleSecurityEvent(context);
+        verify(communicator).sendBulkRequest(captor.capture());
+
+        // Then: should fall back to binding namespace
+        JsonNode event = captor.getValue().get(0);
+        String source = event.get("source").asText();
+        assertTrue(source.contains("/binding-namespace/"),
+            "Source should fall back to binding namespace when payload is blank, but was: " + source);
+    }
+
+    @Test
+    public void testPayloadNamespace_FallsBackToBinding_WhenPayloadNull() throws Exception {
+        // Given: payload namespace returns null
+        when(communicator.getRegion()).thenReturn("eu10");
+        when(communicator.getNamespace()).thenReturn("binding-namespace");
+
+        SecurityLogContext context = mock(SecurityLogContext.class);
+        SecurityLog securityLog = mock(SecurityLog.class);
+        when(context.getUserInfo()).thenReturn(userInfo);
+        when(context.getData()).thenReturn(securityLog);
+        when(securityLog.getData()).thenReturn("test data");
+        when(securityLog.get(NAMESPACE_ATTRIBUTE)).thenReturn(null);
+
+        ArgumentCaptor<ArrayNode> captor = ArgumentCaptor.forClass(ArrayNode.class);
+        handler.handleSecurityEvent(context);
+        verify(communicator).sendBulkRequest(captor.capture());
+
+        // Then: should fall back to binding namespace
+        JsonNode event = captor.getValue().get(0);
+        String source = event.get("source").asText();
+        assertTrue(source.contains("/binding-namespace/"),
+            "Source should fall back to binding namespace when payload is null, but was: " + source);
     }
 
     private ChangedAttribute mockChangedAttribute(String name, String oldValue, String newValue) {

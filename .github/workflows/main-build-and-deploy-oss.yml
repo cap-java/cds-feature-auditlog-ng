@@ -9,20 +9,37 @@ on:
     types: [ "released" ]
 
 jobs:
-  #blackduck:
-  #  name: Blackduck Scan
-  #  runs-on: ubuntu-latest
-  #  timeout-minutes: 15
-  #  steps:
-  #    - name: Checkout
-  #      uses: actions/checkout@v6
-  #    - name: Scan With Black Duck
-  #      uses: ./.github/actions/scan-with-blackduck
-  #      with:
-  #        blackduck_token: ${{ secrets.BLACK_DUCK_TOKEN }}
-  #        github_token: ${{ secrets.GITHUB_TOKEN }}
-  #        maven-version: ${{ env.MAVEN_VERSION }}
+  blackduck:
+    name: Blackduck Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
+      - name: Scan With Black Duck
+        uses: ./.github/actions/scan-with-blackduck
+        with:
+          blackduck_token: ${{ secrets.BLACK_DUCK_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          maven-version: ${{ env.MAVEN_VERSION }}
+          scan_mode: RAPID
+
+  codeql:
+    name: CodeQL Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Scan With CodeQL
+        continue-on-error: true
+        uses: ./.github/actions/scan-with-codeql
+        with:
+          maven-version: ${{ env.MAVEN_VERSION }}
+          java-version: ${{ env.JAVA_VERSION }}
+  
   update-version:
     name: Update Version
     runs-on: ubuntu-latest

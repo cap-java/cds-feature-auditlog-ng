@@ -23,37 +23,48 @@ jobs:
   #        github_token: ${{ secrets.GITHUB_TOKEN }}
   #        maven-version: ${{ env.MAVEN_VERSION }}
 
-  update-version:
-    name: Update Version
+  # update-version:
+  #   name: Update Version
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v6
+  #       with:
+  #         token: ${{ secrets.GH_TOKEN }}
+  #     - name: Update version
+  #       uses: ./.github/actions/newrelease
+  #       with:
+  #         java-version: ${{ env.JAVA_VERSION }}
+  #         maven-version: ${{ env.MAVEN_VERSION }}
+  #     - name: Upload Changed Artifacts
+  #       uses: actions/upload-artifact@v6
+  #       with:
+  #         name: root-new-version
+  #         path: .
+  #         include-hidden-files: true
+  #         retention-days: 1
+  requires-approval:
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          token: ${{ secrets.GH_TOKEN }}
-      - name: Update version
-        uses: ./.github/actions/newrelease
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          maven-version: ${{ env.MAVEN_VERSION }}
-      - name: Upload Changed Artifacts
-        uses: actions/upload-artifact@v6
-        with:
-          name: root-new-version
-          path: .
-          include-hidden-files: true
-          retention-days: 1
+    name: "Waiting for release approval"
+    environment: Release-Approval
+    permissions:
+      contents: read
+      steps:
+      - name: Approval Step
+        run: echo "Release has been approved!"
 
   build:
     #name: Build and Sonar Scan
     name: Build
     runs-on: ubuntu-latest
-    needs: update-version
+    needs: requires-approval
     steps:
-      - name: Download artifact
-        uses: actions/download-artifact@v7
-        with:
-          name: root-new-version
+      # - name: Download artifact
+      #   uses: actions/download-artifact@v7
+      #   with:
+      #     name: root-new-version
+      - name: Checkout
+        uses: actions/checkout@v6
       - name: Build
         uses: ./.github/actions/build
         with:
@@ -77,6 +88,7 @@ jobs:
   deploy:
     name: Deploy to Maven Central
     runs-on: ubuntu-latest
+    environment: Release
     #needs: [blackduck, build]
     needs: [build]
     steps:
@@ -87,8 +99,8 @@ jobs:
       - name: Deploy
         uses: ./.github/actions/deploy-release
         with:
-          user: ${{ secrets.CENTRAL_REPOSITORY_USER }}
-          password: ${{ secrets.CENTRAL_REPOSITORY_PASS }}
+          user: ${{ secrets.CAP_JAVA_CDS_FEATURE_AUDITLOG_NG_USER }}
+          password: ${{ secrets.CAP_JAVA_CDS_FEATURE_AUDITLOG_NG_PASS }}
           pgp-pub-key: ${{ secrets.PGP_PUBKEY_ID }}
           pgp-private-key: ${{ secrets.PGP_PRIVATE_KEY }}
           pgp-passphrase: ${{ secrets.PGP_PASSPHRASE }}

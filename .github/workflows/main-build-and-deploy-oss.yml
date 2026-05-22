@@ -49,7 +49,7 @@ jobs:
     environment: Release-Approval
     permissions:
       contents: read
-      steps:
+    steps:
       - name: Approval Step
         run: echo "Release has been approved!"
 

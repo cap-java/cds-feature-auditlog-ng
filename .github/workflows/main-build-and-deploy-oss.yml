@@ -18,7 +18,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Scan With Black Duck
-        uses: ./.github/actions/scan-with-blackduck
+        uses: cap-java/cds-feature-auditlog-ng/.github/actions/scan-with-blackduck@main
         with:
           blackduck_token: ${{ secrets.BLACK_DUCK_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -35,7 +35,7 @@ jobs:
 
       - name: Scan With CodeQL
         continue-on-error: true
-        uses: ./.github/actions/scan-with-codeql
+        uses: cap-java/cds-feature-auditlog-ng/.github/actions/scan-with-codeql@main
         with:
           maven-version: ${{ env.MAVEN_VERSION }}
           java-version: ${{ env.JAVA_VERSION }}
@@ -49,7 +49,7 @@ jobs:
         with:
           token: ${{ secrets.GH_TOKEN }}
       - name: Update version
-        uses: ./.github/actions/newrelease
+        uses: cap-java/cds-feature-auditlog-ng/.github/actions/newrelease@main
         with:
           java-version: ${{ env.JAVA_VERSION }}
           maven-version: ${{ env.MAVEN_VERSION }}
@@ -72,12 +72,12 @@ jobs:
         with:
           name: root-new-version
       - name: Build
-        uses: ./.github/actions/build
+        uses: cap-java/cds-feature-auditlog-ng/.github/actions/build@main
         with:
           java-version: ${{ env.JAVA_VERSION }}
           maven-version: ${{ env.MAVEN_VERSION }}
       #- name: Sonar Scan
-      #  uses: ./.github/actions/scan-with-sonar
+      #  uses: cap-java/cds-feature-auditlog-ng/.github/actions/scan-with-sonar@main
       #  with:
       #    java-version: ${{ env.JAVA_VERSION }}
       #    maven-version: ${{ env.MAVEN_VERSION }}
@@ -102,7 +102,7 @@ jobs:
         with:
           name: root-build
       - name: Deploy
-        uses: ./.github/actions/deploy-release
+        uses: cap-java/cds-feature-auditlog-ng/.github/actions/deploy-release@main
         with:
           user: ${{ secrets.CENTRAL_REPOSITORY_USER }}
           password: ${{ secrets.CENTRAL_REPOSITORY_PASS }}

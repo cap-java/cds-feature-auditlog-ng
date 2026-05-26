@@ -55,7 +55,3 @@ runs:
           --detect.tools=DETECTOR,BINARY_SCAN
           --detect.risk.report.pdf=false
           --logging.level.detect=INFO
-      env:
-        BLACKDUCKSCA_TOKEN: ${{ inputs.blackduck_token }}
-        BLACKDUCKSCA_URL: https://sap.blackducksoftware.com/
-        BLACKDUCK_API_TOKEN: ${{ inputs.blackduck_token }}

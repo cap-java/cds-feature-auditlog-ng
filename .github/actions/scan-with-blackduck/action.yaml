@@ -47,12 +47,11 @@ runs:
         blackducksca_url: https://sap.blackducksoftware.com/
         blackducksca_token: ${{ inputs.blackduck_token }}
         blackducksca_scan_full: ${{ inputs.scan_mode == 'FULL' }}
-        github_token: ${{ inputs.github_token }}
         detect_args: >
           --detect.project.name=com.sap.cds.feature.auditlog-ng
           --detect.project.version.name=${{ steps.get-revision.outputs.REVISION }}
           --detect.included.detector.types=MAVEN
-          --detect.excluded.directories=**/node_modules,**/*test*,**/localrepo,**/target/site,**/*-site.jar,**/samples/**
+          --detect.excluded.directories=**/node_modules,**/*test*,**/target/site
           --detect.tools=DETECTOR,BINARY_SCAN
           --detect.risk.report.pdf=false
           --logging.level.detect=INFO

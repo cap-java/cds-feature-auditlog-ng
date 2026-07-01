@@ -33,7 +33,7 @@ public class AuditLogNGCommunicator {
     private static final int NUMBER_RETRIES = 3;
     private static final Duration TIMEOUT_DURATION = Duration.ofMillis(30000);
     private static final String RESILIENCE_CONFIG_NAME = "auditlog";
-    private static final String AUDITLOG_EVENTS_ENDPOINT = "/ingestion/v1/events";
+    private static final String AUDITLOG_EVENTS_ENDPOINT = "/ingestion/v2/events";
 
     private final ResilienceConfiguration resilienceConfig;
     private final String serviceUrl;
@@ -71,6 +71,7 @@ public class AuditLogNGCommunicator {
     String sendBulkRequest(Object auditLogEvents) throws JsonProcessingException {
         logger.debug("Sending bulk request to audit log service");
         String bulkRequestJson = serializeBulkRequest(auditLogEvents);
+        System.out.println("========================= The auditlogs which are sent: " + bulkRequestJson);
         HttpPost request = new HttpPost(serviceUrl + AUDITLOG_EVENTS_ENDPOINT);
         request.setEntity(new StringEntity(bulkRequestJson, ContentType.APPLICATION_JSON));
         try {

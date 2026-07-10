@@ -47,7 +47,7 @@ jobs:
 
     strategy:
       matrix:
-        java-version: [ 17, 21 ]
+        java-version: [ 21, 25 ]
 
     steps:
       - name: Checkout
@@ -85,6 +85,6 @@ jobs:
         uses: cap-java/.github/actions/scan-with-codeql@296573b55e906f5c77a1855bcfe4285cbbc5cac4 # main
         with:
           maven-version: ${{ env.MAVEN_VERSION }}
-          java-version: '17'
+          java-version: '21'
           language: java-kotlin
           queries: security-extended

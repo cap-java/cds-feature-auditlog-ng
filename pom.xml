@@ -24,11 +24,11 @@
 
   <properties>
     <revision>0.0.4</revision>
-    <java.version>17</java.version>
+    <java.version>21</java.version>
     <maven.compiler.release>${java.version}</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <json-schema-validator.version>2.0.0</json-schema-validator.version>
-    <cds.services.version>4.6.1</cds.services.version>
+    <cds.services.version>5.0.0</cds.services.version>
     <auditlog-common.version>2.7.2</auditlog-common.version>
     <auditlog-client.version>2.8.3</auditlog-client.version>
     <xs-env.version>1.61.0</xs-env.version>
@@ -37,7 +37,9 @@
     <mockito.version>5.18.0</mockito.version>
     <sdk-bom.version>5.25.0</sdk-bom.version>
     <mockito-bom.version>5.21.0</mockito-bom.version>
-    <bcpkix-jdk18on.version>1.83</bcpkix-jdk18on.version>
+    <kotlin.version>2.4.0</kotlin.version>
+    <jackson.version>2.22.1</jackson.version>
+    <bcpkix-jdk18on.version>1.84</bcpkix-jdk18on.version>
   </properties>
 
   <groupId>com.sap.cds</groupId>
@@ -55,6 +57,38 @@
 
   <dependencyManagement>
     <dependencies>
+      <!-- Version overrides to address BlackDuck policy violations not yet resolved by the BOM -->
+      <dependency>
+        <groupId>org.jetbrains.kotlin</groupId>
+        <artifactId>kotlin-stdlib</artifactId>
+        <version>${kotlin.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.jetbrains.kotlin</groupId>
+        <artifactId>kotlin-stdlib-common</artifactId>
+        <version>${kotlin.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.jetbrains.kotlin</groupId>
+        <artifactId>kotlin-stdlib-jdk7</artifactId>
+        <version>${kotlin.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.jetbrains.kotlin</groupId>
+        <artifactId>kotlin-stdlib-jdk8</artifactId>
+        <version>${kotlin.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-databind</artifactId>
+        <version>${jackson.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-core</artifactId>
+        <version>${jackson.version}</version>
+      </dependency>
+
       <dependency>
         <groupId>com.sap.cds</groupId>
         <artifactId>cds-services-bom</artifactId>

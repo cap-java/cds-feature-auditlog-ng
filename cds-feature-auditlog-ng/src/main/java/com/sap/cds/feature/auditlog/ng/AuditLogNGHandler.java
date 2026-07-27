@@ -655,6 +655,9 @@ public class AuditLogNGHandler implements EventHandler {
     }
 
     private String formatEventTypeToV2(String eventType) {
+        if (eventType == null || eventType.isEmpty()) {
+            return eventType;
+        }
         if (eventType.toLowerCase().startsWith("cmk")) {
             return eventType.substring(0, 3).toUpperCase() + eventType.substring(3);
         }

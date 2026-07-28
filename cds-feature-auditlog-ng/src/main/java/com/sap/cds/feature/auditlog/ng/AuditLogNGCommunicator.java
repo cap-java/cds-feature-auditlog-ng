@@ -71,8 +71,7 @@ public class AuditLogNGCommunicator {
     String sendBulkRequest(Object auditLogEvents, final boolean isLegacyEvent) throws JsonProcessingException {
         logger.debug("Sending bulk request to audit log service");
         String bulkRequestJson = serializeBulkRequest(auditLogEvents);
-        HttpPost request;
-        request = prepareRequest(isLegacyEvent, bulkRequestJson);
+        HttpPost request = prepareRequest(isLegacyEvent, bulkRequestJson);
         try {
             return ResilienceDecorator.executeCallable(() -> executeBulkRequest(request), resilienceConfig);
         } catch (ErrorStatusException ese) {

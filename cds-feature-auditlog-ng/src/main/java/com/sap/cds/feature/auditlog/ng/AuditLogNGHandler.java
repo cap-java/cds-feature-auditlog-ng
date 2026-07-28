@@ -472,7 +472,8 @@ public class AuditLogNGHandler implements EventHandler {
     }
 
     private String resolveTenant(UserInfo userInfo) {
-        return (userInfo.getTenant() == null || userInfo.getTenant().isEmpty()) ? tenantService.readProviderTenant() : userInfo.getTenant();
+        final String tenant = (userInfo.getTenant() == null || userInfo.getTenant().isEmpty()) ? tenantService.readProviderTenant() : userInfo.getTenant();
+        return tenant != null ? tenant : "null";
     }
 
     /**

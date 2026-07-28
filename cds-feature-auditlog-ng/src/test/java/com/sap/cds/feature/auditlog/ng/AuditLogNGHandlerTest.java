@@ -623,6 +623,46 @@ public class AuditLogNGHandlerTest {
     }
 
     @Test
+    public void testSapSupportUser_SetsAttributeInLegacySecurityEventMetadata() throws Exception {
+        when(userInfo.getAdditionalAttribute("sap_support_user")).thenReturn(true);
+        when(userInfo.getName()).thenReturn("support-user");
+
+        SecurityLogContext context = mock(SecurityLogContext.class);
+        SecurityLog securityLog = mock(SecurityLog.class);
+        when(context.getUserInfo()).thenReturn(userInfo);
+        when(context.getData()).thenReturn(securityLog);
+        when(securityLog.getData()).thenReturn("security event data");
+
+        ArgumentCaptor<ArrayNode> captor = ArgumentCaptor.forClass(ArrayNode.class);
+        handler.handleSecurityEvent(context);
+        verify(communicator).sendBulkRequest(captor.capture(), eq(true));
+
+        JsonNode metadata = captor.getValue().get(0).get("data").get("metadata");
+        assertTrue(metadata.has("sap_support_user"), "sap_support_user should be present in metadata");
+        assertTrue(metadata.get("sap_support_user").asBoolean(), "sap_support_user should be true");
+        assertEquals("support-user", metadata.get("userInitiatorId").asText());
+    }
+
+    @Test
+    public void testNonSapSupportUser_DoesNotSetAttributeInLegacySecurityEventMetadata() throws Exception {
+        when(userInfo.getAdditionalAttribute("sap_support_user")).thenReturn(null);
+        when(userInfo.getName()).thenReturn("regular-user");
+
+        SecurityLogContext context = mock(SecurityLogContext.class);
+        SecurityLog securityLog = mock(SecurityLog.class);
+        when(context.getUserInfo()).thenReturn(userInfo);
+        when(context.getData()).thenReturn(securityLog);
+        when(securityLog.getData()).thenReturn("security event data");
+
+        ArgumentCaptor<ArrayNode> captor = ArgumentCaptor.forClass(ArrayNode.class);
+        handler.handleSecurityEvent(context);
+        verify(communicator).sendBulkRequest(captor.capture(), eq(true));
+
+        JsonNode metadata = captor.getValue().get(0).get("data").get("metadata");
+        assertFalse(metadata.has("sap_support_user"), "sap_support_user should NOT be present for non-support user");
+    }
+
+    @Test
     public void testResolveTenant_FallsBackToProviderTenant_WhenUserTenantNull() throws Exception {
         when(userInfo.getTenant()).thenReturn(null);
 

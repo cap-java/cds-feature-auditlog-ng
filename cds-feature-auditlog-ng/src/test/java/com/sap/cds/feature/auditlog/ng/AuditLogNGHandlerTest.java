@@ -45,6 +45,7 @@ import java.util.Map;
 import static com.sap.cds.feature.auditlog.ng.AuditLogNG.NAMESPACE_ATTRIBUTE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.clearInvocations;
@@ -638,9 +639,14 @@ public class AuditLogNGHandlerTest {
         verify(communicator).sendBulkRequest(captor.capture(), eq(true));
 
         JsonNode metadata = captor.getValue().get(0).get("data").get("metadata");
-        assertTrue(metadata.has("sap_support_user"), "sap_support_user should be present in metadata");
-        assertTrue(metadata.get("sap_support_user").asBoolean(), "sap_support_user should be true");
         assertEquals("support-user", metadata.get("userInitiatorId").asText());
+
+        String origEventJson = captor.getValue().get(0).get("data").get("data").get("legacySecurityWrapper").get("origEvent").asText();
+        JsonNode origEvent = new com.fasterxml.jackson.databind.ObjectMapper().readTree(origEventJson);
+        JsonNode customDetails = origEvent.get("customDetails");
+        assertNotNull(customDetails, "customDetails should be present in origEvent for SAP support user");
+        assertTrue(customDetails.has("sap_support_user"), "sap_support_user should be present in customDetails");
+        assertTrue(customDetails.get("sap_support_user").asBoolean(), "sap_support_user should be true");
     }
 
     @Test

@@ -205,9 +205,6 @@ public class AuditLogNGHandler implements EventHandler {
         ObjectNode metadata = OBJECT_MAPPER.createObjectNode();
         metadata.put("ts", Instant.now().toString());
         metadata.put("userInitiatorId", userInfo.getName() != null ? userInfo.getName() : ANONYMOUS_USER);
-        if (Boolean.TRUE.equals(userInfo.getAdditionalAttribute(ATTRIBUTE_SAP_SUPPORT_USER))) {
-            metadata.put(ATTRIBUTE_SAP_SUPPORT_USER, true);
-        }
         ObjectNode infraOther = metadata.putObject("infrastructure").putObject("other");
         infraOther.put("runtimeType", "Java");
         ObjectNode platformOther = metadata.putObject("platform").putObject("other");
@@ -245,6 +242,11 @@ public class AuditLogNGHandler implements EventHandler {
         setFieldIfNotNull(envelop, "identityProvider", "$IDP");
         setFieldIfNotNull(envelop, "time", Instant.now().toString());
         setFieldIfNotNull(envelop, "data", formattedData);
+        if (Boolean.TRUE.equals(userInfo.getAdditionalAttribute(ATTRIBUTE_SAP_SUPPORT_USER))) {
+            ObjectNode customDetails = OBJECT_MAPPER.createObjectNode();
+            customDetails.put(ATTRIBUTE_SAP_SUPPORT_USER, true);
+            envelop.set("customDetails", customDetails);
+        }
         return envelop;
     }
 

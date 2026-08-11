@@ -22,6 +22,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 
 public class AuditLogNGCommunicator {
@@ -34,6 +35,8 @@ public class AuditLogNGCommunicator {
     private static final String RESILIENCE_CONFIG_NAME = "auditlog";
     private static final String AUDITLOG_V1_INGESTION_ENDPOINT = "/ingestion/v1/events";
     private static final String AUDITLOG_V2_INGESTION_ENDPOINT = "/ingestion/v2/events";
+    private static final ContentType CLOUDEVENTS_BATCH_JSON =
+            ContentType.create("application/cloudevents-batch+json", StandardCharsets.UTF_8);
 
     private final ResilienceConfiguration resilienceConfig;
     private final String serviceUrl;
@@ -97,7 +100,7 @@ public class AuditLogNGCommunicator {
      */
     private HttpPost prepareRequest(boolean isLegacyEvent, String bulkRequestJson) {
         String endpoint = isLegacyEvent ? AUDITLOG_V1_INGESTION_ENDPOINT : AUDITLOG_V2_INGESTION_ENDPOINT;
-        ContentType contentType = isLegacyEvent ? ContentType.APPLICATION_JSON : ContentType.create("application/cloudevents-batch+json", "UTF-8");
+        ContentType contentType = isLegacyEvent ? ContentType.APPLICATION_JSON : CLOUDEVENTS_BATCH_JSON;
         HttpPost request = new HttpPost(serviceUrl + endpoint);
         request.setEntity(new StringEntity(bulkRequestJson, contentType));
         return request;

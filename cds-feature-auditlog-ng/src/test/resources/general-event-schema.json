@@ -1,57 +1,138 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "type": "object",
-  "required": [
-    "id",
-    "specversion",
-    "source",
-    "type",
-    "time",
-    "data"
-  ],
-  "properties": {
-    "id": {
-      "type": "string"
-    },
-    "specversion": {
-      "type": [
-        "string",
-        "integer"
-      ]
-    },
-    "source": {
-      "type": "string"
-    },
-    "type": {
-      "type": "string"
-    },
-    "time": {
-      "type": "string",
-      "format": "date-time"
-    },
-    "data": {
-      "type": "object",
-      "required": [
-        "metadata",
-        "data"
-      ],
-      "properties": {
-        "metadata": {
-          "type": "object",
-          "required": [
-            "ts"
-          ],
-          "properties": {
-            "ts": {
-              "type": "string"
-            }
-          }
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$defs": {
+        "_UserContext": {
+            "additionalProperties": false,
+            "properties": {
+                "attributes": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "description": "Additional custom attributes",
+                    "propertyNames": {
+                        "type": "string"
+                    },
+                    "type": "object"
+                },
+                "type": {
+                    "description": "UserType",
+                    "enum": [
+                        "USER_TYPE_BUSINESS_USER",
+                        "USER_TYPE_TECHNICAL_USER",
+                        "USER_TYPE_SAP_SUPPORT_USER"
+                    ],
+                    "title": "User Type",
+                    "type": "string"
+                }
+            },
+            "title": "User Context",
+            "type": "object"
         },
-        "data": {
-          "type": "object"
+        "_Common": {
+            "additionalProperties": false,
+            "description": "\n\n| Annotation | Value |\n| --- | --- |\n",
+            "properties": {
+                "appContext": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "propertyNames": {
+                        "type": "string"
+                    },
+                    "type": "object"
+                },
+                "appId": {
+                    "type": "string"
+                },
+                "sourceIp": {
+                    "description": "IP Address of the source in IPv4 or IPv6",
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                },
+                "tenantId": {
+                    "description": "tenant ID of the source",
+                    "type": "string"
+                },
+                "timestamp": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "userGlobalId": {
+                    "description": "contains the global user ID, who caused the audit log event",
+                    "type": "string"
+                },
+                "userImpersonatedContext": {
+                    "$ref": "#/$defs/_UserContext",
+                    "description": "Extended user context for Impersonated User"
+                },
+                "userImpersonatedGlobalId": {
+                    "description": "contains the global user ID of the impersonated user",
+                    "type": "string"
+                },
+                "userImpersonatedId": {
+                    "description": "contains the local user ID, which is used in case of impersonation",
+                    "type": "string"
+                },
+                "userInitiatorContext": {
+                    "$ref": "#/$defs/_UserContext",
+                    "description": "Extended user context for User Initiator"
+                },
+                "userInitiatorId": {
+                    "description": "contains the local user ID, who caused the audit log event",
+                    "type": "string"
+                },
+                "userSessionContextId": {
+                    "type": "string"
+                }
+            },
+            "required": [],
+            "title": "Common",
+            "type": "object"
+        },
+        "GeneralEventData": {
+            "type": "object",
+            "required": ["common", "type"],
+            "additionalProperties": true,
+            "properties": {
+                "type": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "common": {
+                    "$ref": "#/$defs/_Common"
+                }
+            }
+        },
+        "EventEnvelope": {
+            "type": "object",
+            "required": ["specversion", "type", "data"],
+            "additionalProperties": true,
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "specversion": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "time": {
+                    "type": "string"
+                },
+                "dataschema": {
+                    "type": "string"
+                },
+                "data": {
+                    "$ref": "#/$defs/GeneralEventData"
+                }
+            }
         }
-      }
-    }
-  },
-  "additionalProperties": false
+    },
+    "$ref": "#/$defs/EventEnvelope"
 }

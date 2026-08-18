@@ -24,7 +24,7 @@ import org.apache.http.impl.client.DefaultHttpRequestRetryHandler;
 import org.apache.http.impl.client.HttpClients;
 import org.bouncycastle.asn1.pkcs.PrivateKeyInfo;
 import org.bouncycastle.cert.X509CertificateHolder;
-import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.jcajce.provider.BouncyCastleFipsProvider;
 import org.bouncycastle.openssl.PEMParser;
 import org.bouncycastle.openssl.jcajce.JceOpenSSLPKCS8DecryptorProviderBuilder;
 import org.bouncycastle.operator.InputDecryptorProvider;
@@ -52,9 +52,9 @@ public class CertificateHttpClientConfig {
     private static final Logger logger = LoggerFactory.getLogger(CertificateHttpClientConfig.class);
 
     static {
-        // Register BouncyCastle provider if not already present
-        if (Security.getProvider("BC") == null) {
-            Security.addProvider(new BouncyCastleProvider());
+        // Register BouncyCastle FIPS provider if not already present
+        if (Security.getProvider("BCFIPS") == null) {
+            Security.addProvider(new BouncyCastleFipsProvider());
         }
     }
 
@@ -170,11 +170,11 @@ public class CertificateHttpClientConfig {
     private CloseableHttpClient createHttpClient() {
         try {
             char[] effectivePassphrase = (keyPassphrase != null) ? keyPassphrase.toCharArray() : new char[0];
-            logger.info("Creating HttpClient with certificate authentication and {} retries", maxRetries);
+            logger.info("Creating HttpClient with certificate authentication and {} retries (BCFIPS)", maxRetries);
             X509Certificate[] certChain = parseCertificateChain(certPem);
             PrivateKey privateKey = parsePrivateKey(keyPem, effectivePassphrase);
 
-            KeyStore keyStore = KeyStore.getInstance("PKCS12");
+            KeyStore keyStore = KeyStore.getInstance("PKCS12", "BCFIPS");
             keyStore.load(null, null);
             keyStore.setKeyEntry("client", privateKey, new char[0], certChain);
 
@@ -237,7 +237,7 @@ public class CertificateHttpClientConfig {
                 return KeyFactory.getInstance("RSA").generatePrivate(keySpec);
             } else if (object instanceof PKCS8EncryptedPrivateKeyInfo encInfo) {
                 try {
-                    InputDecryptorProvider decryptorProvider = new JceOpenSSLPKCS8DecryptorProviderBuilder().build(effectivePassphrase);
+                    InputDecryptorProvider decryptorProvider = new JceOpenSSLPKCS8DecryptorProviderBuilder().setProvider("BCFIPS").build(effectivePassphrase);
                     PrivateKeyInfo keyInfo = encInfo.decryptPrivateKeyInfo(decryptorProvider);
                     PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(keyInfo.getEncoded());
                     return KeyFactory.getInstance("RSA").generatePrivate(keySpec);

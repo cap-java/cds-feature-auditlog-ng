@@ -3,9 +3,14 @@
  */
 package com.sap.cds.feature.auditlog.ng;
 
-import java.io.IOException;
-import java.time.Duration;
-
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sap.cds.services.utils.CdsErrorStatuses;
+import com.sap.cds.services.utils.ErrorStatusException;
+import com.sap.cloud.environment.servicebinding.api.ServiceBinding;
+import com.sap.cloud.sdk.cloudplatform.resilience.ResilienceConfiguration;
+import com.sap.cloud.sdk.cloudplatform.resilience.ResilienceDecorator;
+import com.sap.cloud.sdk.cloudplatform.resilience.ResilienceIsolationMode;
 import org.apache.http.HttpResponse;
 import org.apache.http.HttpStatus;
 import org.apache.http.client.methods.HttpPost;
@@ -16,14 +21,9 @@ import org.apache.http.util.EntityUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.sap.cds.services.utils.CdsErrorStatuses;
-import com.sap.cds.services.utils.ErrorStatusException;
-import com.sap.cloud.environment.servicebinding.api.ServiceBinding;
-import com.sap.cloud.sdk.cloudplatform.resilience.ResilienceConfiguration;
-import com.sap.cloud.sdk.cloudplatform.resilience.ResilienceDecorator;
-import com.sap.cloud.sdk.cloudplatform.resilience.ResilienceIsolationMode;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 
 public class AuditLogNGCommunicator {
 
@@ -33,7 +33,10 @@ public class AuditLogNGCommunicator {
     private static final int NUMBER_RETRIES = 3;
     private static final Duration TIMEOUT_DURATION = Duration.ofMillis(30000);
     private static final String RESILIENCE_CONFIG_NAME = "auditlog";
-    private static final String AUDITLOG_EVENTS_ENDPOINT = "/ingestion/v1/events";
+    private static final String AUDITLOG_V1_INGESTION_ENDPOINT = "/ingestion/v1/events";
+    private static final String AUDITLOG_V2_INGESTION_ENDPOINT = "/ingestion/v2/events";
+    private static final ContentType CLOUDEVENTS_BATCH_JSON =
+            ContentType.create("application/cloudevents-batch+json", StandardCharsets.UTF_8);
 
     private final ResilienceConfiguration resilienceConfig;
     private final String serviceUrl;
@@ -68,11 +71,10 @@ public class AuditLogNGCommunicator {
         }
     }
 
-    String sendBulkRequest(Object auditLogEvents) throws JsonProcessingException {
+    String sendBulkRequest(Object auditLogEvents, final boolean isLegacyEvent) throws JsonProcessingException {
         logger.debug("Sending bulk request to audit log service");
         String bulkRequestJson = serializeBulkRequest(auditLogEvents);
-        HttpPost request = new HttpPost(serviceUrl + AUDITLOG_EVENTS_ENDPOINT);
-        request.setEntity(new StringEntity(bulkRequestJson, ContentType.APPLICATION_JSON));
+        HttpPost request = prepareRequest(isLegacyEvent, bulkRequestJson);
         try {
             return ResilienceDecorator.executeCallable(() -> executeBulkRequest(request), resilienceConfig);
         } catch (ErrorStatusException ese) {
@@ -85,6 +87,23 @@ public class AuditLogNGCommunicator {
             logger.error("Exception while calling Audit Log service", e);
             throw new ErrorStatusException(CdsErrorStatuses.AUDITLOG_SERVICE_NOT_AVAILABLE, e);
         }
+    }
+
+    /**
+     * Prepares the HTTP POST request for the given audit log events payload.
+     * Legacy events are sent to the v1 ingestion endpoint with {@code application/json} content type.
+     * Non-legacy events are sent to the v2 ingestion endpoint with {@code application/cloudevents-batch+json} content type.
+     *
+     * @param isLegacyEvent whether the event uses the legacy v1 format
+     * @param bulkRequestJson the serialized JSON payload to send
+     * @return a configured {@link HttpPost} request ready to execute
+     */
+    private HttpPost prepareRequest(boolean isLegacyEvent, String bulkRequestJson) {
+        String endpoint = isLegacyEvent ? AUDITLOG_V1_INGESTION_ENDPOINT : AUDITLOG_V2_INGESTION_ENDPOINT;
+        ContentType contentType = isLegacyEvent ? ContentType.APPLICATION_JSON : CLOUDEVENTS_BATCH_JSON;
+        HttpPost request = new HttpPost(serviceUrl + endpoint);
+        request.setEntity(new StringEntity(bulkRequestJson, contentType));
+        return request;
     }
 
     /**

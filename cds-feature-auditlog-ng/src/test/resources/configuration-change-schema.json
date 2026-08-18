@@ -1,78 +1,138 @@
 {
-    "$schema": "http://json-schema.org/draft-04/schema#",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
     "oneOf": [
         {
-            "$ref": "#/definitions/EventEnvelope"
+            "$ref": "#/$defs/EventEnvelope"
         },
         {
-            "$ref": "#/definitions/ConfigurationChange"
+            "$ref": "#/$defs/ConfigurationChange"
+        },
+        {
+            "$ref": "#/$defs/_Common"
         }
     ],
-    "definitions": {
+    "$defs": {
         "ConfigurationChange": {
             "required": [
-                "newValue",
-                "oldValue",
+                "common",
                 "propertyName",
-                "objectType"
+                "type"
             ],
             "properties": {
-                "newValue": {
-                    "oneOf": [
-                        {
-                            "type": "array"
-                        },
-                        {
-                            "type": "boolean"
-                        },
-                        {
-                            "type": "number"
-                        },
-                        {
-                            "type": "object"
-                        },
-                        {
-                            "type": "string"
-                        }
-                    ],
-                    "title": "Value",
-                    "description": "`Value` represents a dynamically typed value which can be either null, a number, a string, a boolean, a recursive struct value, or a list of values. A producer of value is expected to set one of these variants. Absence of any variant indicates an error. The JSON representation for `Value` is JSON value."
+                "common": {
+                    "$ref": "#/$defs/_Common"
                 },
-                "oldValue": {
-                    "oneOf": [
-                        {
-                            "type": "array"
-                        },
-                        {
-                            "type": "boolean"
-                        },
-                        {
-                            "type": "number"
-                        },
-                        {
-                            "type": "object"
-                        },
-                        {
-                            "type": "string"
-                        }
-                    ],
-                    "title": "Value",
-                    "description": "`Value` represents a dynamically typed value which can be either null, a number, a string, a boolean, a recursive struct value, or a list of values. A producer of value is expected to set one of these variants. Absence of any variant indicates an error. The JSON representation for `Value` is JSON value."
-                },
-                "propertyName": {
+                "newValue": {},
+                "objectId": {
                     "type": "string"
                 },
                 "objectType": {
+                    "maxLength": 20,
                     "type": "string"
                 },
-                "objectId": {
+                "oldValue": {},
+                "propertyName": {
+                    "minLength": 1,
                     "type": "string"
+                },
+                "type": {
+                    "const": "ConfigurationChange"
                 }
             },
             "additionalProperties": false,
             "type": "object",
             "title": "Configuration Change",
             "description": "ConfigurationChange states that Configuration has been modified."
+        },
+        "_UserContext": {
+            "additionalProperties": false,
+            "properties": {
+                "attributes": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "description": "Additional custom attributes",
+                    "propertyNames": {
+                        "type": "string"
+                    },
+                    "type": "object"
+                },
+                "type": {
+                    "description": "UserType",
+                    "enum": [
+                        "USER_TYPE_BUSINESS_USER",
+                        "USER_TYPE_TECHNICAL_USER",
+                        "USER_TYPE_SAP_SUPPORT_USER"
+                    ],
+                    "title": "User Type",
+                    "type": "string"
+                }
+            },
+            "title": "User Context",
+            "type": "object"
+        },
+        "_Common": {
+            "additionalProperties": false,
+            "description": "\n\n| Annotation | Value |\n| --- | --- |\n",
+            "properties": {
+                "appContext": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "propertyNames": {
+                        "type": "string"
+                    },
+                    "type": "object"
+                },
+                "appId": {
+                    "type": "string"
+                },
+                "sourceIp": {
+                    "description": "IP Address of the source in IPv4 or IPv6",
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                },
+                "tenantId": {
+                    "description": "tenant ID of the source",
+                    "type": "string"
+                },
+                "timestamp": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "userGlobalId": {
+                    "description": "contains the global user ID, who caused the audit log event",
+                    "type": "string"
+                },
+                "userImpersonatedContext": {
+                    "$ref": "#/$defs/_UserContext",
+                    "description": "Extended user context for Impersonated User"
+                },
+                "userImpersonatedGlobalId": {
+                    "description": "contains the global user ID of the impersonated user",
+                    "type": "string"
+                },
+                "userImpersonatedId": {
+                    "description": "contains the local user ID, which is used in case of impersonation",
+                    "type": "string"
+                },
+                "userInitiatorContext": {
+                    "$ref": "#/$defs/_UserContext",
+                    "description": "Extended user context for User Initiator"
+                },
+                "userInitiatorId": {
+                    "description": "contains the local user ID, who caused the audit log event",
+                    "type": "string"
+                },
+                "userSessionContextId": {
+                    "type": "string"
+                }
+            },
+            "required": [],
+            "title": "Common",
+            "type": "object"
         },
         "EventEnvelope": {
             "type": "object",
@@ -92,29 +152,11 @@
                 "time": {
                     "type": "string"
                 },
+                "dataschema": {
+                    "type": "string"
+                },
                 "data": {
-                    "type": "object",
-                    "properties": {
-                        "metadata": {
-                            "type": "object"
-                        },
-                        "data": {
-                            "type": "object",
-                            "properties": {
-                                "configurationChange": {
-                                    "$ref": "#/definitions/ConfigurationChange"
-                                }
-                            },
-                            "required": [
-                                "configurationChange"
-                            ],
-                            "additionalProperties": true
-                        }
-                    },
-                    "required": [
-                        "data"
-                    ],
-                    "additionalProperties": true
+                    "$ref": "#/$defs/ConfigurationChange"
                 }
             },
             "required": [

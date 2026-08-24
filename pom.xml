@@ -38,7 +38,10 @@
     <mockito.version>5.18.0</mockito.version>
     <sdk-bom.version>5.25.0</sdk-bom.version>
     <mockito-bom.version>5.21.0</mockito-bom.version>
-    <bcpkix-jdk18on.version>1.83</bcpkix-jdk18on.version>
+    <bc-fips.version>2.1.3</bc-fips.version>
+    <bcpkix-fips.version>2.1.8</bcpkix-fips.version>
+    <bctls-fips.version>2.1.20</bctls-fips.version>
+    <bcutil-fips.version>2.1.5</bcutil-fips.version>
   </properties>
 
   <groupId>com.sap.cds</groupId>
@@ -86,14 +89,26 @@
   <dependencies>
     <dependency>
       <groupId>org.bouncycastle</groupId>
-      <artifactId>bcprov-jdk18on</artifactId>
-      <version>${bcpkix-jdk18on.version}</version>
+      <artifactId>bc-fips</artifactId>
+      <version>${bc-fips.version}</version>
     </dependency>
 
     <dependency>
       <groupId>org.bouncycastle</groupId>
-      <artifactId>bcpkix-jdk18on</artifactId>
-      <version>${bcpkix-jdk18on.version}</version>
+      <artifactId>bcpkix-fips</artifactId>
+      <version>${bcpkix-fips.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bctls-fips</artifactId>
+      <version>${bctls-fips.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcutil-fips</artifactId>
+      <version>${bcutil-fips.version}</version>
     </dependency>
 
     <dependency>

@@ -38,6 +38,7 @@ import org.slf4j.Logger;
 
 import java.time.Instant;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -70,6 +71,23 @@ public class AuditLogNGHandler implements EventHandler {
     private static final String CHANNEL_NOT_SPECIFIED = "not specified";
     private static final String ANONYMOUS_USER = "anonymous";
     private static final String NULL_VALUE = "null";
+
+    /**
+     * Payload key holding the {@code common} section overrides supplied by the client as a nested map, e.g.
+     * {@code data.put("common", Map.of("userInitiatorId", ..., "userInitiatorContext", ...))}.
+     * The value must be a {@code Map} following the Audit Event v2 {@code common} / {@code UserContext} schema.
+     */
+    private static final String COMMON_OVERRIDE_KEY = "common";
+
+    /**
+     * Fields of the Audit Event v2 {@code common} section that can be overridden via the event payload.
+     * Each field is read from the {@link #COMMON_OVERRIDE_KEY} override map.
+     */
+    private static final List<String> COMMON_OVERRIDE_FIELDS = List.of(
+            "userInitiatorId",
+            "userImpersonatedId",
+            "userInitiatorContext",
+            "userImpersonatedContext");
 
     private final AuditLogNGCommunicator communicator;
     private final TenantProviderService tenantService;
@@ -134,7 +152,7 @@ public class AuditLogNGHandler implements EventHandler {
     private ObjectNode createGeneralEventNode(String eventType, UserInfo userInfo, ObjectNode eventNode) {
         String formattedEventType = formatEventTypeToV2(eventType);
         ObjectNode eventEnvelope = buildEventEnvelope(formattedEventType, userInfo, null);
-        ObjectNode common = buildEventCommonSection(userInfo);
+        ObjectNode common = buildEventCommonSection(userInfo, null);
         ObjectNode dataNode = createGeneralEventDataNode(formattedEventType, common, eventNode);
         eventEnvelope.set("data", dataNode);
         return eventEnvelope;
@@ -174,7 +192,7 @@ public class AuditLogNGHandler implements EventHandler {
         SecurityLog data = requireNonNull(context.getData(), "SecurityLogContext.getData() is null");
         UserInfo userInfo = requireNonNull(context.getUserInfo(), "SecurityLogContext.getUserInfo() is null");
         ObjectNode alsEvent = buildLegacySecurityEventEnvelope(LEGACY_SECURITY_WRAPPER, userInfo, data);
-        ObjectNode metadata = buildLegacySecurityEventMetadata(userInfo);
+        ObjectNode metadata = buildLegacySecurityEventMetadata(userInfo, data);
         ObjectNode origEvent = createLegacySecurityOrigEvent(userInfo, data);
         ObjectNode legacySecurityWrapper = OBJECT_MAPPER.createObjectNode();
         try {
@@ -201,10 +219,13 @@ public class AuditLogNGHandler implements EventHandler {
         return alsEvent;
     }
 
-    private ObjectNode buildLegacySecurityEventMetadata(UserInfo userInfo) {
+    private ObjectNode buildLegacySecurityEventMetadata(UserInfo userInfo, CdsData payload) {
         ObjectNode metadata = OBJECT_MAPPER.createObjectNode();
         metadata.put("ts", Instant.now().toString());
         metadata.put("userInitiatorId", userInfo.getName() != null ? userInfo.getName() : ANONYMOUS_USER);
+        // Payload overrides for the native v1 metadata identity fields
+        setFieldIfNotNull(metadata, "userInitiatorId", commonOverride(payload, "userInitiatorId"));
+        setFieldIfNotNull(metadata, "userImpersonatedId", commonOverride(payload, "userImpersonatedId"));
         ObjectNode infraOther = metadata.putObject("infrastructure").putObject("other");
         infraOther.put("runtimeType", "Java");
         ObjectNode platformOther = metadata.putObject("platform").putObject("other");
@@ -224,7 +245,7 @@ public class AuditLogNGHandler implements EventHandler {
      *
      * The resulting JSON object includes the following fields:
      *   - uuid: A randomly generated UUID string for the event
-     *   - user: The name of the user from userInfo, or "unknown" if userInfo is null
+     *   - user: The acting user, preferring the {@code userInitiatorId} override, then userInfo, then "unknown"
      *   - identityProvider: A constant value "$IDP"
      *   - time: The current timestamp as an ISO-8601 string
      *   - data: The data from the SecurityLog object, or an empty string if data is null
@@ -238,16 +259,58 @@ public class AuditLogNGHandler implements EventHandler {
         String formattedData = "action: %s, data: %s".formatted(data.getAction(), data.getData());
         formattedData = formattedData.replace("\r\n", "\\n").replace("\n", "\\n");
         setFieldIfNotNull(envelop, "uuid", UUID.randomUUID().toString());
-        setFieldIfNotNull(envelop, "user", userInfo.getName() != null ? userInfo.getName() : "unknown");
+        setFieldIfNotNull(envelop, "user", resolveInitiatorUser(userInfo, data));
         setFieldIfNotNull(envelop, "identityProvider", "$IDP");
         setFieldIfNotNull(envelop, "time", Instant.now().toString());
         setFieldIfNotNull(envelop, "data", formattedData);
-        if (Boolean.TRUE.equals(userInfo.getAdditionalAttribute(ATTRIBUTE_SAP_SUPPORT_USER))) {
-            ObjectNode customDetails = OBJECT_MAPPER.createObjectNode();
-            customDetails.put(ATTRIBUTE_SAP_SUPPORT_USER, true);
-            envelop.set("customDetails", customDetails);
-        }
+        addLegacySecurityCustomDetails(envelop, userInfo, data);
         return envelop;
+    }
+
+    /**
+     * Resolves the acting user for the legacy {@code origEvent}, applying the same precedence used across the
+     * {@code common} section: a {@code userInitiatorId} supplied in the {@code common} override map wins, with a
+     * fallback to {@link UserInfo#getName()} and finally {@code "unknown"}.
+     *
+     * @param userInfo the user information used as the fallback
+     * @param payload  the event payload that may contain a {@code userInitiatorId} override, can be {@code null}
+     * @return the resolved acting user
+     */
+    private String resolveInitiatorUser(UserInfo userInfo, CdsData payload) {
+        Object override = commonOverride(payload, "userInitiatorId");
+        if (override instanceof String initiator && !initiator.isEmpty()) {
+            return initiator;
+        }
+        return userInfo.getName() != null ? userInfo.getName() : "unknown";
+    }
+
+    /**
+     * Adds the {@code customDetails} block of a legacy security {@code origEvent}.
+     *
+     * <p>The v1 metadata schema has no extended user-context fields, so the initiator/impersonated
+     * {@code UserContext} objects are carried here, keeping the v2 {@code UserContext} shape
+     * ({@code type} plus a {@code string}-to-{@code string} {@code attributes} map).</p>
+     *
+     * <p>The SAP support-user signal is represented purely through the initiator context {@code type}
+     * ({@code USER_TYPE_SAP_SUPPORT_USER}): the {@code common} override's {@code userInitiatorContext} is
+     * primary, and {@link UserInfo} is only a rollback used to synthesize that context when no override is
+     * present (see {@link #resolveUserInitiatorContext(UserInfo, CdsData)}). The block is emitted whenever an
+     * effective initiator context or an impersonated context override exists.</p>
+     *
+     * @param envelop  the {@code origEvent} node to update in place
+     * @param userInfo the user information used as the support-user rollback
+     * @param payload  the event payload that may contain context overrides, can be {@code null}
+     */
+    private void addLegacySecurityCustomDetails(ObjectNode envelop, UserInfo userInfo, CdsData payload) {
+        Object userInitiatorContext = resolveUserInitiatorContext(userInfo, payload);
+        Object userImpersonatedContext = commonOverride(payload, "userImpersonatedContext");
+        if (userInitiatorContext == null && userImpersonatedContext == null) {
+            return;
+        }
+        ObjectNode customDetails = OBJECT_MAPPER.createObjectNode();
+        setFieldIfNotNull(customDetails, "userInitiatorContext", userInitiatorContext);
+        setFieldIfNotNull(customDetails, "userImpersonatedContext", userImpersonatedContext);
+        envelop.set("customDetails", customDetails);
     }
 
     public void handleDataAccessEvent(DataAccessLogContext context) throws JsonProcessingException {
@@ -361,7 +424,7 @@ public class AuditLogNGHandler implements EventHandler {
      */
     private ObjectNode buildConfigChangeEvent(UserInfo userInfo, ConfigChange configChanges, ChangedAttribute attribute, CdsData payload) {
         DataObject dataObject = requireNonNull(configChanges.getDataObject(), "ConfigChange.getDataObject() is null");
-        ObjectNode common = buildEventCommonSection(userInfo);
+        ObjectNode common = buildEventCommonSection(userInfo, payload);
         ObjectNode dataNode = createConfigurationChangeDataNode(attribute, dataObject, common);
         return buildAlsEvent(EVENT_TYPE_CONFIGURATION_CHANGE, userInfo, dataNode, payload);
     }
@@ -432,7 +495,7 @@ public class AuditLogNGHandler implements EventHandler {
      */
     private ObjectNode buildDataModificationAlsEvent(UserInfo userInfo, DataModification modification, ChangedAttribute attribute, CdsData payload) {
         DataObject dataObject = requireNonNull(modification.getDataObject(), "DataModification.getDataObject() is null");
-        ObjectNode common = buildEventCommonSection(userInfo);
+        ObjectNode common = buildEventCommonSection(userInfo, payload);
         ObjectNode dataNode = createDppDataModificationDataNode(attribute, modification.getDataSubject(), dataObject, common);
         return buildAlsEvent(EVENT_TYPE_DPP_DATA_MODIFICATION, userInfo, dataNode, payload);
     }
@@ -511,20 +574,99 @@ public class AuditLogNGHandler implements EventHandler {
      * Builds the common section of an audit event payload, including tenantId, userInitiatorId,
      * and optionally userInitiatorContext for SAP support users.
      *
+     * <p>Values derived from {@link UserInfo} act as defaults and can be overridden per request via
+     * the event payload, see {@link #applyCommonOverridesFromPayload(ObjectNode, CdsData)}.</p>
+     *
      * @param userInfo the user information used to populate the common section
+     * @param payload  the event payload that may contain common-section overrides, can be {@code null}
      * @return an {@link ObjectNode} representing the common section
      */
-    private ObjectNode buildEventCommonSection(UserInfo userInfo) {
+    private ObjectNode buildEventCommonSection(UserInfo userInfo, CdsData payload) {
         ObjectNode common = OBJECT_MAPPER.createObjectNode();
         String tenant = resolveTenant(userInfo);
         common.put("tenantId", tenant);
         common.put("userInitiatorId", userInfo.getName() != null ? userInfo.getName() : ANONYMOUS_USER);
+        setFieldIfNotNull(common, "userInitiatorContext", resolveUserInitiatorContext(userInfo, payload));
+        applyCommonOverridesFromPayload(common, payload);
+        return common;
+    }
+
+    /**
+     * Resolves the effective {@code userInitiatorContext} using a single, consistent precedence shared by the
+     * v2 {@code common} section and the legacy security {@code customDetails}.
+     *
+     * <p>The SAP support-user signal is expressed through the context {@code type}
+     * ({@code USER_TYPE_SAP_SUPPORT_USER}): a {@code userInitiatorContext} supplied in the {@code common}
+     * override map is primary, and {@link UserInfo#getAdditionalAttribute(String)} ({@code sap_support_user})
+     * is only a rollback used to synthesize a {@code {type: USER_TYPE_SAP_SUPPORT_USER}} context when no
+     * override is present.</p>
+     *
+     * @param userInfo the user information used as the support-user rollback
+     * @param payload  the event payload that may contain a {@code userInitiatorContext} override, can be {@code null}
+     * @return the effective initiator context (override value or a synthesized support-user context), or {@code null}
+     */
+    private Object resolveUserInitiatorContext(UserInfo userInfo, CdsData payload) {
+        Object override = commonOverride(payload, "userInitiatorContext");
+        if (override != null) {
+            return override;
+        }
         if (Boolean.TRUE.equals(userInfo.getAdditionalAttribute(ATTRIBUTE_SAP_SUPPORT_USER))) {
             ObjectNode userInitiatorContext = OBJECT_MAPPER.createObjectNode();
             userInitiatorContext.put("type", USER_TYPE_SAP_SUPPORT_USER);
-            common.set("userInitiatorContext", userInitiatorContext);
+            return userInitiatorContext;
         }
-        return common;
+        return null;
+    }
+
+    /**
+     * Overrides fields of the {@code common} section with values supplied in the event payload.
+     *
+     * <p>The client provides overrides as a nested map under the {@link #COMMON_OVERRIDE_KEY} key, e.g.
+     * {@code data.put("common", Map.of("userInitiatorId", ..., "userImpersonatedId", ...,
+     * "userInitiatorContext", Map.of("type", ...), "userImpersonatedContext", Map.of("type", ...)))}.
+     * Only the allow-listed fields (see {@link #COMMON_OVERRIDE_FIELDS}) are applied. Override values must
+     * follow the v2 schema shape: strings for identifiers and {@code UserContext} objects (with {@code type}
+     * and optional {@code attributes}) for the context fields. Absent or {@code null} entries leave the
+     * computed defaults untouched.</p>
+     *
+     * @param common  the common section to update in place
+     * @param payload the event payload that may contain override entries, can be {@code null}
+     */
+    private void applyCommonOverridesFromPayload(ObjectNode common, CdsData payload) {
+        Map<String, Object> overrides = commonOverrides(payload);
+        if (overrides == null) {
+            return;
+        }
+        for (String field : COMMON_OVERRIDE_FIELDS) {
+            setFieldIfNotNull(common, field, overrides.get(field));
+        }
+    }
+
+    /**
+     * Reads a single {@code common} override value from the event payload.
+     *
+     * @param payload the event payload, can be {@code null}
+     * @param field   the v2 common field name
+     * @return the override value, or {@code null} if the payload has no {@code common} override map or the entry is absent
+     */
+    private Object commonOverride(CdsData payload, String field) {
+        Map<String, Object> overrides = commonOverrides(payload);
+        return overrides == null ? null : overrides.get(field);
+    }
+
+    /**
+     * Extracts the client-supplied {@code common} override map from the event payload.
+     *
+     * @param payload the event payload, can be {@code null}
+     * @return the override map, or {@code null} when absent or not a {@code Map}
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> commonOverrides(CdsData payload) {
+        if (payload == null) {
+            return null;
+        }
+        Object common = payload.get(COMMON_OVERRIDE_KEY);
+        return common instanceof Map ? (Map<String, Object>) common : null;
     }
 
     /**
@@ -539,7 +681,7 @@ public class AuditLogNGHandler implements EventHandler {
      * @return an {@link ObjectNode} representing the constructed ALS event for data access
      */
     private ObjectNode buildDataAccessAlsEvent(UserInfo userInfo, Access access, String attribute, String attachmentType, String attachmentId, CdsData payload) {
-        ObjectNode common = buildEventCommonSection(userInfo);
+        ObjectNode common = buildEventCommonSection(userInfo, payload);
         ObjectNode dataNode = createDppDataAccessDataNode(access, attribute, attachmentType, attachmentId, common);
         return buildAlsEvent(EVENT_TYPE_DPP_DATA_ACCESS, userInfo, dataNode, payload);
     }

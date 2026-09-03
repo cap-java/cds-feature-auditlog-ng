@@ -35,7 +35,6 @@ import com.sap.cds.services.request.UserInfo;
 import com.sap.cds.services.utils.CdsErrorStatuses;
 import com.sap.cds.services.utils.ErrorStatusException;
 import org.slf4j.Logger;
-
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;

@@ -61,7 +61,7 @@ public class AuditLogNGHandler implements EventHandler {
     private static final Logger LOGGER = getLogger(AuditLogNGHandler.class);
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final String LEGACY_SECURITY_WRAPPER = "legacySecurityWrapper";
-    private static final String DATA_SCHEMA_VERSION = "audit-logging-v2.1.6";
+    private static final String DATA_SCHEMA_VERSION = "v2.2.0";
     private static final String DATA_SCHEMA = String.format("https://github.tools.sap/wg-observability/telemetry-semantic-conventions/blob/%s/payload-specifications/audit-logging/proto/sap/auditlog/auditevent/v2/auditevent.proto#/", DATA_SCHEMA_VERSION);
     private static final String ATTRIBUTE_SAP_SUPPORT_USER = "sap_support_user";
     private static final String USER_TYPE_SAP_SUPPORT_USER = "USER_TYPE_SAP_SUPPORT_USER";

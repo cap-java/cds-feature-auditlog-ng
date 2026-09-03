@@ -570,6 +570,17 @@ public class AuditLogNGHandlerTest {
         return cc;
     }
 
+    /**
+     * Standard SAP support-user {@code common} override map used across the per-event-type override tests.
+     */
+    private static Map<String, Object> sapSupportCommonOverride() {
+        return Map.of(
+            "userInitiatorId", "P0000support01@sap.com",
+            "userImpersonatedId", "S-User",
+            "userInitiatorContext", Map.of("type", "USER_TYPE_SAP_SUPPORT_USER"),
+            "userImpersonatedContext", Map.of("type", "USER_TYPE_BUSINESS_USER"));
+    }
+
     @Test
     public void testSapSupportUser_SetsUserInitiatorContext() throws Exception {
         when(userInfo.getAdditionalAttribute("sap_support_user")).thenReturn(true);
@@ -595,6 +606,8 @@ public class AuditLogNGHandlerTest {
         JsonNode common = captor.getValue().get(0).get("data").get("common");
         assertTrue(common.has("userInitiatorContext"), "userInitiatorContext should be set for SAP support user");
         assertEquals("USER_TYPE_SAP_SUPPORT_USER", common.get("userInitiatorContext").get("type").asText());
+        assertFalse(common.has("userImpersonatedContext"),
+            "a support user in userInfo must not auto-fill userImpersonatedContext (initiator-only fallback)");
     }
 
     @Test
@@ -645,8 +658,9 @@ public class AuditLogNGHandlerTest {
         JsonNode origEvent = new com.fasterxml.jackson.databind.ObjectMapper().readTree(origEventJson);
         JsonNode customDetails = origEvent.get("customDetails");
         assertNotNull(customDetails, "customDetails should be present in origEvent for SAP support user");
-        assertTrue(customDetails.has("sap_support_user"), "sap_support_user should be present in customDetails");
-        assertTrue(customDetails.get("sap_support_user").asBoolean(), "sap_support_user should be true");
+        assertFalse(customDetails.has("sap_support_user"), "sap_support_user boolean should no longer be emitted");
+        assertEquals("USER_TYPE_SAP_SUPPORT_USER", customDetails.get("userInitiatorContext").get("type").asText(),
+            "SAP support user should be represented as userInitiatorContext.type");
     }
 
     @Test
@@ -666,6 +680,229 @@ public class AuditLogNGHandlerTest {
 
         JsonNode metadata = captor.getValue().get(0).get("data").get("metadata");
         assertFalse(metadata.has("sap_support_user"), "sap_support_user should NOT be present for non-support user");
+    }
+
+    @Test
+    public void testDataAccessLog_AppliesCommonOverridesFromPayload() throws Exception {
+        // Given: the client attaches support-user identity via the "common" override map
+        when(userInfo.getName()).thenReturn("regular-user");
+
+        KeyValuePair id = mockKeyValuePair("userId", "user-1");
+        DataObject dataObject = mockDataObject("User", List.of(id));
+        DataSubject dataSubject = mockDataSubject("Person", List.of(id));
+        Attribute attr = mockAttribute("email");
+        Access access = mock(Access.class);
+        when(access.getDataObject()).thenReturn(dataObject);
+        when(access.getDataSubject()).thenReturn(dataSubject);
+        when(access.getAttributes()).thenReturn(List.of(attr));
+        DataAccessLog dataAccessLog = mock(DataAccessLog.class);
+        when(dataAccessLog.getAccesses()).thenReturn(List.of(access));
+
+        Map<String, Object> commonOverride = Map.of(
+            "userInitiatorId", "P0000support01@sap.com",
+            "userImpersonatedId", "S-User",
+            "userInitiatorContext", Map.of(
+                "type", "USER_TYPE_SAP_SUPPORT_USER",
+                "attributes", Map.of("support_ticket", "INC-2026-88231", "idp", "sap.support-idp")),
+            "userImpersonatedContext", Map.of("type", "USER_TYPE_BUSINESS_USER"));
+        when(dataAccessLog.get("common")).thenReturn(commonOverride);
+
+        DataAccessLogContext context = mock(DataAccessLogContext.class);
+        when(context.getData()).thenReturn(dataAccessLog);
+        when(context.getUserInfo()).thenReturn(userInfo);
+
+        ArgumentCaptor<ArrayNode> captor = ArgumentCaptor.forClass(ArrayNode.class);
+        handler.handleDataAccessEvent(context);
+        verify(communicator).sendBulkRequest(captor.capture(), eq(false));
+
+        // Then: the overrides land in the v2 common section (not metadata), preserving the UserContext shape
+        JsonNode common = captor.getValue().get(0).get("data").get("common");
+        assertEquals("P0000support01@sap.com", common.get("userInitiatorId").asText(),
+            "userInitiatorId should come from the common override");
+        assertEquals("S-User", common.get("userImpersonatedId").asText(),
+            "userImpersonatedId should come from the common override");
+        assertEquals("USER_TYPE_SAP_SUPPORT_USER", common.get("userInitiatorContext").get("type").asText());
+        assertEquals("INC-2026-88231", common.get("userInitiatorContext").get("attributes").get("support_ticket").asText(),
+            "UserContext.attributes should be preserved");
+        assertEquals("sap.support-idp", common.get("userInitiatorContext").get("attributes").get("idp").asText());
+        assertEquals("USER_TYPE_BUSINESS_USER", common.get("userImpersonatedContext").get("type").asText());
+    }
+
+    @Test
+    public void testSecurityLog_AppliesCommonOverridesFromPayload() throws Exception {
+        // Given: the client attaches support-user identity via the "common" override map on a legacy security event
+        when(userInfo.getName()).thenReturn("regular-user");
+
+        SecurityLogContext context = mock(SecurityLogContext.class);
+        SecurityLog securityLog = mock(SecurityLog.class);
+        when(context.getUserInfo()).thenReturn(userInfo);
+        when(context.getData()).thenReturn(securityLog);
+        when(securityLog.getData()).thenReturn("security event data");
+
+        Map<String, Object> commonOverride = sapSupportCommonOverride();
+        when(securityLog.get("common")).thenReturn(commonOverride);
+
+        ArgumentCaptor<ArrayNode> captor = ArgumentCaptor.forClass(ArrayNode.class);
+        handler.handleSecurityEvent(context);
+        verify(communicator).sendBulkRequest(captor.capture(), eq(true));
+
+        JsonNode data = captor.getValue().get(0).get("data");
+
+        // Then: the identifiers map to the native v1 metadata fields
+        JsonNode metadata = data.get("metadata");
+        assertEquals("P0000support01@sap.com", metadata.get("userInitiatorId").asText(),
+            "userInitiatorId should override the v1 metadata field");
+        assertEquals("S-User", metadata.get("userImpersonatedId").asText(),
+            "userImpersonatedId should override the v1 metadata field");
+
+        // And: the UserContext objects (unsupported by v1 metadata) are carried in origEvent.customDetails
+        String origEventJson = data.get("data").get("legacySecurityWrapper").get("origEvent").asText();
+        JsonNode origEvent = OBJECT_MAPPER.readTree(origEventJson);
+        assertEquals("P0000support01@sap.com", origEvent.get("user").asText(),
+            "origEvent.user should honor the userInitiatorId override, not userInfo.getName()");
+        JsonNode customDetails = origEvent.get("customDetails");
+        assertNotNull(customDetails, "customDetails should carry the UserContext overrides");
+        assertEquals("USER_TYPE_SAP_SUPPORT_USER", customDetails.get("userInitiatorContext").get("type").asText());
+        assertEquals("USER_TYPE_BUSINESS_USER", customDetails.get("userImpersonatedContext").get("type").asText());
+        assertFalse(metadata.has("userInitiatorContext"), "UserContext must not be placed in v1 metadata");
+        assertFalse(metadata.has("userImpersonatedContext"), "UserContext must not be placed in v1 metadata");
+    }
+
+    @Test
+    public void testConfigChangeLog_AppliesCommonOverridesFromPayload() throws Exception {
+        when(userInfo.getName()).thenReturn("regular-user");
+
+        ChangedAttribute attr = mockChangedAttribute("logLevel", "INFO", "DEBUG");
+        KeyValuePair id = mockKeyValuePair("appId", "app-1");
+        DataObject dataObject = mockDataObject("AppConfig", List.of(id));
+        ConfigChange config = mockConfigChange(List.of(attr), dataObject);
+        ConfigChangeLog configChangeLog = mock(ConfigChangeLog.class);
+        when(configChangeLog.getConfigurations()).thenReturn(List.of(config));
+
+        Map<String, Object> commonOverride = sapSupportCommonOverride();
+        when(configChangeLog.get("common")).thenReturn(commonOverride);
+
+        ConfigChangeLogContext context = mock(ConfigChangeLogContext.class);
+        when(context.getData()).thenReturn(configChangeLog);
+        when(context.getUserInfo()).thenReturn(userInfo);
+
+        ArgumentCaptor<ArrayNode> captor = ArgumentCaptor.forClass(ArrayNode.class);
+        handler.handleConfigChangeEvent(context);
+        verify(communicator).sendBulkRequest(captor.capture(), eq(false));
+
+        JsonNode common = captor.getValue().get(0).get("data").get("common");
+        assertEquals("P0000support01@sap.com", common.get("userInitiatorId").asText());
+        assertEquals("S-User", common.get("userImpersonatedId").asText());
+        assertEquals("USER_TYPE_SAP_SUPPORT_USER", common.get("userInitiatorContext").get("type").asText());
+        assertEquals("USER_TYPE_BUSINESS_USER", common.get("userImpersonatedContext").get("type").asText());
+    }
+
+    @Test
+    public void testDataModificationLog_AppliesCommonOverridesFromPayload() throws Exception {
+        when(userInfo.getName()).thenReturn("regular-user");
+
+        ChangedAttribute attr = mockChangedAttribute("email", "old@example.com", "new@example.com");
+        KeyValuePair id = mockKeyValuePair("userId", "user-1");
+        DataObject dataObject = mockDataObject("User", List.of(id));
+        DataSubject dataSubject = mockDataSubject("Person", List.of(id));
+        DataModification modification = mockDataModification(List.of(attr), dataObject, dataSubject);
+        DataModificationLog dataModificationLog = mock(DataModificationLog.class);
+        when(dataModificationLog.getModifications()).thenReturn(List.of(modification));
+
+        Map<String, Object> commonOverride = sapSupportCommonOverride();
+        when(dataModificationLog.get("common")).thenReturn(commonOverride);
+
+        DataModificationLogContext context = mock(DataModificationLogContext.class);
+        when(context.getData()).thenReturn(dataModificationLog);
+        when(context.getUserInfo()).thenReturn(userInfo);
+
+        ArgumentCaptor<ArrayNode> captor = ArgumentCaptor.forClass(ArrayNode.class);
+        handler.handleDataModificationEvent(context);
+        verify(communicator).sendBulkRequest(captor.capture(), eq(false));
+
+        JsonNode common = captor.getValue().get(0).get("data").get("common");
+        assertEquals("P0000support01@sap.com", common.get("userInitiatorId").asText());
+        assertEquals("S-User", common.get("userImpersonatedId").asText());
+        assertEquals("USER_TYPE_SAP_SUPPORT_USER", common.get("userInitiatorContext").get("type").asText());
+        assertEquals("USER_TYPE_BUSINESS_USER", common.get("userImpersonatedContext").get("type").asText());
+    }
+
+    @Test
+    public void testDataAccessLog_PartialCommonOverride_KeepsDefaults() throws Exception {
+        // Given: only userInitiatorId is overridden; the other fields are absent from the override map
+        when(userInfo.getName()).thenReturn("regular-user");
+
+        KeyValuePair id = mockKeyValuePair("userId", "user-1");
+        DataObject dataObject = mockDataObject("User", List.of(id));
+        DataSubject dataSubject = mockDataSubject("Person", List.of(id));
+        Attribute attr = mockAttribute("email");
+        Access access = mock(Access.class);
+        when(access.getDataObject()).thenReturn(dataObject);
+        when(access.getDataSubject()).thenReturn(dataSubject);
+        when(access.getAttributes()).thenReturn(List.of(attr));
+        DataAccessLog dataAccessLog = mock(DataAccessLog.class);
+        when(dataAccessLog.getAccesses()).thenReturn(List.of(access));
+
+        Map<String, Object> commonOverride = Map.of("userInitiatorId", "P0000support01@sap.com");
+        when(dataAccessLog.get("common")).thenReturn(commonOverride);
+
+        DataAccessLogContext context = mock(DataAccessLogContext.class);
+        when(context.getData()).thenReturn(dataAccessLog);
+        when(context.getUserInfo()).thenReturn(userInfo);
+
+        ArgumentCaptor<ArrayNode> captor = ArgumentCaptor.forClass(ArrayNode.class);
+        handler.handleDataAccessEvent(context);
+        verify(communicator).sendBulkRequest(captor.capture(), eq(false));
+
+        // Then: the provided field is overridden, and absent fields are not injected
+        JsonNode common = captor.getValue().get(0).get("data").get("common");
+        assertEquals("P0000support01@sap.com", common.get("userInitiatorId").asText(),
+            "userInitiatorId should be overridden");
+        assertFalse(common.has("userImpersonatedId"), "userImpersonatedId should not be set when absent from override");
+        assertFalse(common.has("userInitiatorContext"), "userInitiatorContext should not be set when absent from override");
+        assertFalse(common.has("userImpersonatedContext"), "userImpersonatedContext should not be set when absent from override");
+    }
+
+    @Test
+    public void testDataAccessLog_CommonOverride_TakesPrecedence_OverUserInfo() throws Exception {
+        // Given: userInfo would produce its own defaults (name + SAP support user context)...
+        when(userInfo.getName()).thenReturn("userinfo-fallback-user");
+        when(userInfo.getAdditionalAttribute("sap_support_user")).thenReturn(true);
+
+        KeyValuePair id = mockKeyValuePair("userId", "user-1");
+        DataObject dataObject = mockDataObject("User", List.of(id));
+        DataSubject dataSubject = mockDataSubject("Person", List.of(id));
+        Attribute attr = mockAttribute("email");
+        Access access = mock(Access.class);
+        when(access.getDataObject()).thenReturn(dataObject);
+        when(access.getDataSubject()).thenReturn(dataSubject);
+        when(access.getAttributes()).thenReturn(List.of(attr));
+        DataAccessLog dataAccessLog = mock(DataAccessLog.class);
+        when(dataAccessLog.getAccesses()).thenReturn(List.of(access));
+
+        // ...but the override supplies different values, which must win
+        Map<String, Object> commonOverride = Map.of(
+            "userInitiatorId", "override-initiator",
+            "userInitiatorContext", Map.of(
+                "type", "USER_TYPE_BUSINESS_USER",
+                "attributes", Map.of("origin", "override")));
+        when(dataAccessLog.get("common")).thenReturn(commonOverride);
+
+        DataAccessLogContext context = mock(DataAccessLogContext.class);
+        when(context.getData()).thenReturn(dataAccessLog);
+        when(context.getUserInfo()).thenReturn(userInfo);
+
+        ArgumentCaptor<ArrayNode> captor = ArgumentCaptor.forClass(ArrayNode.class);
+        handler.handleDataAccessEvent(context);
+        verify(communicator).sendBulkRequest(captor.capture(), eq(false));
+
+        // Then: override values win over the userInfo-derived defaults
+        JsonNode common = captor.getValue().get(0).get("data").get("common");
+        assertEquals("override-initiator", common.get("userInitiatorId").asText(),
+            "override userInitiatorId must take precedence over userInfo.getName()");
+        assertEquals("USER_TYPE_BUSINESS_USER", common.get("userInitiatorContext").get("type").asText(),
+            "override userInitiatorContext must take precedence over the SAP support user default");
+        assertEquals("override", common.get("userInitiatorContext").get("attributes").get("origin").asText());
     }
 
     @Test

@@ -97,6 +97,16 @@ To get your project running, ensure you have the following prerequisites:
 - A user-provided service instance for SAP Audit Log service created in your Cloud Foundry space
 - The Maven dependency for `cds-feature-auditlog-ng` added to your project
 
+## Cryptographic providers
+
+The default certificate client uses Java's built-in cryptography and does not install a Bouncy Castle provider. Applications that do not select FIPS mode therefore do not need to add a Bouncy Castle dependency just for this plugin.
+
+To use FIPS mode, provide compatible `bc-fips`, `bcpkix-fips`, `bcutil-fips`, and `bctls-fips` dependencies and select FIPS before creating the first audit-log client with `-Dcds.auditlog.crypto.mode=fips` (or `Builder#cryptoMode(CryptoMode.FIPS)`). Standard (`bcprov-jdk18on`, `bcpkix-jdk18on`, or `bcutil-jdk18on`) Bouncy Castle jars must not be on the complete runtime classpath; the plugin fails closed if they are detected.
+
+FIPS mode requires Bouncy Castle's approved-only mode. The plugin enables it when it initializes FIPS. If another component initializes BCFIPS first, start the JVM with `-Dorg.bouncycastle.fips.approved_only=true`; this makes BCFIPS start in approved-only mode, including for worker threads.
+
+The FIPS dependency versions are implementation coordinates, not a certification claim; use the versions and validated configuration approved for the target deployment.
+
 ## Dynamic Namespace Selection (Optional)
 
 By default, the namespace used in audit log events is taken from the service binding credentials. This is sufficient for most applications.

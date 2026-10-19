@@ -1,34 +1,33 @@
 package com.sap.cds.feature.auditlog.ng;
 
 import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.StringReader;
 import java.security.KeyFactory;
 import java.security.KeyStore;
 import java.security.PrivateKey;
 import java.security.SecureRandom;
-import java.security.Security;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
+import javax.crypto.Cipher;
+import javax.crypto.EncryptedPrivateKeyInfo;
+import javax.crypto.SecretKey;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.DefaultHttpRequestRetryHandler;
 import org.apache.http.impl.client.HttpClients;
-import org.bouncycastle.asn1.pkcs.PrivateKeyInfo;
-import org.bouncycastle.cert.X509CertificateHolder;
-import org.bouncycastle.jce.provider.BouncyCastleProvider;
-import org.bouncycastle.openssl.PEMParser;
-import org.bouncycastle.openssl.jcajce.JceOpenSSLPKCS8DecryptorProviderBuilder;
-import org.bouncycastle.operator.InputDecryptorProvider;
-import org.bouncycastle.pkcs.PKCS8EncryptedPrivateKeyInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,32 +45,45 @@ import org.slf4j.LoggerFactory;
  * 
  * This class supports both encrypted and unencrypted PKCS#8 private keys. If the key is encrypted,
  * a passphrase must be provided. If the key is unencrypted, passphrase can be null or empty.
+ * <p>The default mode uses JDK cryptography APIs. FIPS mode is opt-in through
+ * the cds.auditlog.crypto.mode=fips system property (or Builder#cryptoMode(CryptoMode)) and
+ * requires the optional Bouncy Castle FIPS/JSSE dependencies supplied by the application.</p>
  */
 public class CertificateHttpClientConfig {
 
+    /** System property used to select the cryptographic mode. */
+    public static final String CRYPTO_MODE_PROPERTY = "cds.auditlog.crypto.mode";
+    private static final String PEM_BLOCK =
+            "-----BEGIN ([A-Z0-9 ]+)-----\\s*(.*?)\\s*-----END \\1-----";
+    private static final Pattern PEM_PATTERN = Pattern.compile(PEM_BLOCK, Pattern.DOTALL);
+    private static final AtomicReference<CryptoMode> LATCHED_MODE = new AtomicReference<>();
     private static final Logger logger = LoggerFactory.getLogger(CertificateHttpClientConfig.class);
 
-    static {
-        // Register BouncyCastle provider if not already present
-        if (Security.getProvider("BC") == null) {
-            Security.addProvider(new BouncyCastleProvider());
-        }
-    }
-
-    private final String certPem;
-    private final String keyPem;
-    private final String keyPassphrase;
-    private final int maxRetries;
-    private final int timeoutMillis;
     private final CloseableHttpClient httpClient;
 
     CertificateHttpClientConfig(Builder builder) {
-        this.certPem = builder.certPem;
-        this.keyPem = builder.keyPem;
-        this.keyPassphrase = builder.keyPassphrase;
-        this.maxRetries = builder.maxRetries;
-        this.timeoutMillis = builder.timeoutMillis;
-        this.httpClient = createHttpClient();
+        CryptoMode mode = latchMode(builder.cryptoMode);
+        this.httpClient = createHttpClient(builder, mode);
+    }
+
+    /**
+     * Cryptographic implementation used by the client. The mode is latched when the first
+     * client is built so changing a process-wide FIPS setting after initialization is rejected.
+     */
+    public enum CryptoMode {
+        STANDARD,
+        FIPS;
+
+        private static CryptoMode parse(String value) {
+            if (value == null || value.isBlank() || "standard".equalsIgnoreCase(value)) {
+                return STANDARD;
+            }
+            if ("fips".equalsIgnoreCase(value)) {
+                return FIPS;
+            }
+            throw new IllegalArgumentException(
+                    "Unsupported audit log cryptographic mode: " + value + " (expected standard or fips)");
+        }
     }
 
     /**
@@ -105,6 +117,7 @@ public class CertificateHttpClientConfig {
         private String keyPassphrase;
         private int maxRetries = 3;
         private int timeoutMillis = 30000;
+        private CryptoMode cryptoMode;
 
         /**
          * Sets the PEM-encoded certificate chain.
@@ -151,6 +164,12 @@ public class CertificateHttpClientConfig {
             this.timeoutMillis = timeoutMillis;
             return this;
         }
+        /** Explicitly selects standard or FIPS cryptography for this client. */
+        public Builder cryptoMode(CryptoMode cryptoMode) {
+            this.cryptoMode = cryptoMode;
+            return this;
+        }
+
         /**
          * Builds the {@link CertificateHttpClientConfig} instance.
          * @return a configured CertificateHttpClientConfig
@@ -161,41 +180,68 @@ public class CertificateHttpClientConfig {
         }
     }
 
+    private static CryptoMode latchMode(CryptoMode requested) {
+        CryptoMode effective = requested != null ? requested : configuredMode();
+        CryptoMode latched = LATCHED_MODE.get();
+        if (latched == null && LATCHED_MODE.compareAndSet(null, effective)) {
+            return effective;
+        }
+        latched = LATCHED_MODE.get();
+        if (latched != effective) {
+            throw new IllegalStateException(
+                    "Audit log cryptographic mode is already latched as " + latched
+                            + "; it cannot be changed to " + effective);
+        }
+        return latched;
+    }
+
+    private static CryptoMode configuredMode() {
+        String value = System.getProperty(CRYPTO_MODE_PROPERTY);
+        return CryptoMode.parse(value);
+    }
+
     /**
      * Creates the configured HTTP client with certificate authentication and retry logic.
      *
      * @return a configured CloseableHttpClient
      * @throws RuntimeException if client creation fails
      */
-    private CloseableHttpClient createHttpClient() {
+    private static CloseableHttpClient createHttpClient(Builder builder, CryptoMode mode) {
+        char[] passphrase = builder.keyPassphrase == null
+                ? new char[0]
+                : builder.keyPassphrase.toCharArray();
         try {
-            char[] effectivePassphrase = (keyPassphrase != null) ? keyPassphrase.toCharArray() : new char[0];
-            logger.info("Creating HttpClient with certificate authentication and {} retries", maxRetries);
-            X509Certificate[] certChain = parseCertificateChain(certPem);
-            PrivateKey privateKey = parsePrivateKey(keyPem, effectivePassphrase);
-
-            KeyStore keyStore = KeyStore.getInstance("PKCS12");
-            keyStore.load(null, null);
-            keyStore.setKeyEntry("client", privateKey, new char[0], certChain);
-
-            KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-            kmf.init(keyStore, new char[0]);
-
-            SSLContext sslContext = SSLContext.getInstance("TLS");
-            sslContext.init(kmf.getKeyManagers(), null, new SecureRandom());
-
+            logger.info("Creating HttpClient with certificate authentication and {} retries in {} mode",
+                    builder.maxRetries, mode);
+            SSLContext sslContext;
+            if (mode == CryptoMode.FIPS) {
+                try {
+                    sslContext = FipsCryptoSupport.createSslContext(builder.certPem, builder.keyPem, passphrase);
+                } catch (LinkageError e) {
+                    throw new IllegalStateException(
+                            "FIPS mode requires the optional Bouncy Castle FIPS dependencies", e);
+                }
+            } else {
+                X509Certificate[] certChain = parseCertificateChain(builder.certPem);
+                PrivateKey privateKey = parsePrivateKey(builder.keyPem, passphrase);
+                KeyStore keyStore = KeyStore.getInstance("PKCS12");
+                keyStore.load(null, null);
+                keyStore.setKeyEntry("client", privateKey, new char[0], certChain);
+                KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+                kmf.init(keyStore, new char[0]);
+                sslContext = SSLContext.getInstance("TLS");
+                sslContext.init(kmf.getKeyManagers(), null, new SecureRandom());
+            }
             return HttpClients.custom()
                     .setSSLContext(sslContext)
-                    .setRetryHandler(new DefaultHttpRequestRetryHandler(maxRetries, true))
+                    .setRetryHandler(new DefaultHttpRequestRetryHandler(builder.maxRetries, true))
                     .build();
         } catch (Exception e) {
             logger.error("Failed to create HttpClient with certificate/key", e);
             throw new RuntimeException("Failed to create HttpClient with certificate/key: " + e.getMessage(), e);
         } finally {
             // Overwrite passphrase for security
-            if (keyPassphrase != null) {
-                Arrays.fill(keyPassphrase.toCharArray(), '\0');
-            }
+            Arrays.fill(passphrase, '\0');
         }
     }
 
@@ -205,20 +251,19 @@ public class CertificateHttpClientConfig {
      * @return array of X509Certificate
      * @throws Exception if parsing fails
      */
-    private static X509Certificate[] parseCertificateChain(String certPem) throws Exception {
-        try (PEMParser pemParser = new PEMParser(new StringReader(certPem))) {
-            List<X509Certificate> certList = new ArrayList<>();
-            CertificateFactory cf = CertificateFactory.getInstance("X.509");
-            Object object;
-            while ((object = pemParser.readObject()) != null) {
-                if (object instanceof X509CertificateHolder holder) {
-                    Certificate cert = cf.generateCertificate(
-                            new ByteArrayInputStream(holder.getEncoded()));
-                    certList.add((X509Certificate) cert);
-                }
+    static X509Certificate[] parseCertificateChain(String certPem) throws Exception {
+        List<X509Certificate> certList = new ArrayList<>();
+        Matcher matcher = PEM_PATTERN.matcher(certPem);
+        CertificateFactory certificateFactory = CertificateFactory.getInstance("X.509");
+        while (matcher.find()) {
+            if (!"CERTIFICATE".equals(matcher.group(1))) {
+                continue;
             }
-            return certList.toArray(new X509Certificate[0]);
+            byte[] der = Base64.getMimeDecoder().decode(matcher.group(2));
+            Certificate cert = certificateFactory.generateCertificate(new ByteArrayInputStream(der));
+            certList.add((X509Certificate) cert);
         }
+        return certList.toArray(new X509Certificate[0]);
     }
 
     /**
@@ -228,26 +273,30 @@ public class CertificateHttpClientConfig {
      * @return the PrivateKey
      * @throws Exception if parsing or decryption fails
      */
-    private static PrivateKey parsePrivateKey(String keyPem, char[] passphrase) throws Exception {
-        char[] effectivePassphrase = (passphrase != null) ? passphrase : new char[0];
-        try (PEMParser pemParser = new PEMParser(new StringReader(keyPem))) {
-            Object object = pemParser.readObject();
-            if (object instanceof PrivateKeyInfo keyInfo) {
-                PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(keyInfo.getEncoded());
-                return KeyFactory.getInstance("RSA").generatePrivate(keySpec);
-            } else if (object instanceof PKCS8EncryptedPrivateKeyInfo encInfo) {
-                try {
-                    InputDecryptorProvider decryptorProvider = new JceOpenSSLPKCS8DecryptorProviderBuilder().build(effectivePassphrase);
-                    PrivateKeyInfo keyInfo = encInfo.decryptPrivateKeyInfo(decryptorProvider);
-                    PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(keyInfo.getEncoded());
-                    return KeyFactory.getInstance("RSA").generatePrivate(keySpec);
-                } catch (IOException e) {
-                    throw new RuntimeException("Failed to decrypt private key. Check that the passphrase is correct and the key is compatible. Original error: " + e.getMessage(), e);
-                }
-            } else {
-                throw new IllegalArgumentException("Invalid private key format: "
-                        + (object != null ? object.getClass().getName() : "null"));
-            }
+    static PrivateKey parsePrivateKey(String keyPem, char[] passphrase) throws Exception {
+        Matcher matcher = PEM_PATTERN.matcher(keyPem);
+        if (!matcher.find() || (!"PRIVATE KEY".equals(matcher.group(1))
+                && !"ENCRYPTED PRIVATE KEY".equals(matcher.group(1)))) {
+            throw new IllegalArgumentException("Expected a PKCS#8 PEM private key");
         }
+        byte[] der = Base64.getMimeDecoder().decode(matcher.group(2));
+        PKCS8EncodedKeySpec keySpec;
+        if ("ENCRYPTED PRIVATE KEY".equals(matcher.group(1))) {
+            EncryptedPrivateKeyInfo encrypted = new EncryptedPrivateKeyInfo(der);
+            String algorithm = encrypted.getAlgName();
+            char[] effectivePassphrase = passphrase == null ? new char[0] : passphrase;
+            SecretKeyFactory keyFactory = SecretKeyFactory.getInstance(algorithm);
+            SecretKey secretKey = keyFactory.generateSecret(new PBEKeySpec(effectivePassphrase));
+            Cipher cipher = Cipher.getInstance(algorithm);
+            if (encrypted.getAlgParameters() == null) {
+                cipher.init(Cipher.DECRYPT_MODE, secretKey);
+            } else {
+                cipher.init(Cipher.DECRYPT_MODE, secretKey, encrypted.getAlgParameters());
+            }
+            keySpec = encrypted.getKeySpec(cipher);
+        } else {
+            keySpec = new PKCS8EncodedKeySpec(der);
+        }
+        return KeyFactory.getInstance("RSA").generatePrivate(keySpec);
     }
 }

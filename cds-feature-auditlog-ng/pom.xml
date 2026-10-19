@@ -31,6 +31,58 @@
         <dependency>
             <groupId>com.sap.cds</groupId>
             <artifactId>cds-services-utils</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.sap.cloud.sdk.cloudplatform</groupId>
+                    <artifactId>connectivity-oauth</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.sap.cloud.sdk.cloudplatform</groupId>
+                    <artifactId>connectivity-apache-httpclient5</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>com.sap.cloud.sdk.cloudplatform</groupId>
+            <artifactId>resilience</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpclient</artifactId>
+            <version>${httpclient.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpcore</artifactId>
+            <version>${httpcore.version}</version>
+        </dependency>
+
+        <!-- Optional FIPS support. These jars are needed only by explicitly configured FIPS consumers. -->
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bc-fips</artifactId>
+            <version>${bc-fips.version}</version>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcpkix-fips</artifactId>
+            <version>${bcpkix-fips.version}</version>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bctls-fips</artifactId>
+            <version>${bctls-fips.version}</version>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcutil-fips</artifactId>
+            <version>${bcutil-fips.version}</version>
+            <optional>true</optional>
         </dependency>
 
         <dependency>
@@ -58,6 +110,7 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
                     <failIfNoTests>false</failIfNoTests>
+                    <reuseForks>false</reuseForks>
                 </configuration>
             </plugin>
             <plugin>

@@ -51,7 +51,7 @@ public class CertificateHttpClientConfig {
 
     static {
         // Register BouncyCastle provider if not already present
-        if (Security.getProvider("BC") == null) {
+        if (Security.getProvider(BouncyCastleProvider.PROVIDER_NAME) == null) {
             Security.addProvider(new BouncyCastleProvider());
         }
     }
@@ -231,12 +231,12 @@ public class CertificateHttpClientConfig {
         try (PEMParser pemParser = new PEMParser(new StringReader(keyPem))) {
             Object object = pemParser.readObject();
             if (object instanceof PrivateKeyInfo keyInfo) {
-                return new JcaPEMKeyConverter().setProvider("BC").getPrivateKey(keyInfo);
+                return new JcaPEMKeyConverter().setProvider(BouncyCastleProvider.PROVIDER_NAME).getPrivateKey(keyInfo);
             } else if (object instanceof PKCS8EncryptedPrivateKeyInfo encInfo) {
                 try {
                     InputDecryptorProvider decryptorProvider = new JceOpenSSLPKCS8DecryptorProviderBuilder().build(effectivePassphrase);
                     PrivateKeyInfo keyInfo = encInfo.decryptPrivateKeyInfo(decryptorProvider);
-                    return new JcaPEMKeyConverter().setProvider("BC").getPrivateKey(keyInfo);
+                    return new JcaPEMKeyConverter().setProvider(BouncyCastleProvider.PROVIDER_NAME).getPrivateKey(keyInfo);
                 } catch (Exception e) {
                     throw new RuntimeException("Failed to decrypt private key. Check that the passphrase is correct and the key is compatible. Original error: " + e.getMessage(), e);
                 }

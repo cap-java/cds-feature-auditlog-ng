@@ -36,11 +36,11 @@ class CertificateHttpClientConfigTest {
     void buildsHttpClientFromEcCertificateAndKey() throws Exception {
         KeyPairAndPem material = selfSigned("EC", "SHA256withECDSA");
 
-        CloseableHttpClient client = CertificateHttpClientConfig.builder()
+        CloseableHttpClient client = assertDoesNotThrow(() -> CertificateHttpClientConfig.builder()
                 .certPem(material.certPem)
                 .keyPem(material.keyPem)
                 .build()
-                .getHttpClient();
+                .getHttpClient());
 
         assertNotNull(client, "EC-keyed binding should produce an HTTP client");
     }

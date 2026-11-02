@@ -1,9 +1,7 @@
 package com.sap.cds.feature.auditlog.ng;
 
 import java.io.ByteArrayInputStream;
-import java.io.IOException;
 import java.io.StringReader;
-import java.security.KeyFactory;
 import java.security.KeyStore;
 import java.security.PrivateKey;
 import java.security.SecureRandom;
@@ -11,7 +9,6 @@ import java.security.Security;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
-import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -26,6 +23,7 @@ import org.bouncycastle.asn1.pkcs.PrivateKeyInfo;
 import org.bouncycastle.cert.X509CertificateHolder;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.openssl.PEMParser;
+import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter;
 import org.bouncycastle.openssl.jcajce.JceOpenSSLPKCS8DecryptorProviderBuilder;
 import org.bouncycastle.operator.InputDecryptorProvider;
 import org.bouncycastle.pkcs.PKCS8EncryptedPrivateKeyInfo;
@@ -53,7 +51,7 @@ public class CertificateHttpClientConfig {
 
     static {
         // Register BouncyCastle provider if not already present
-        if (Security.getProvider("BC") == null) {
+        if (Security.getProvider(BouncyCastleProvider.PROVIDER_NAME) == null) {
             Security.addProvider(new BouncyCastleProvider());
         }
     }
@@ -233,15 +231,13 @@ public class CertificateHttpClientConfig {
         try (PEMParser pemParser = new PEMParser(new StringReader(keyPem))) {
             Object object = pemParser.readObject();
             if (object instanceof PrivateKeyInfo keyInfo) {
-                PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(keyInfo.getEncoded());
-                return KeyFactory.getInstance("RSA").generatePrivate(keySpec);
+                return new JcaPEMKeyConverter().setProvider(BouncyCastleProvider.PROVIDER_NAME).getPrivateKey(keyInfo);
             } else if (object instanceof PKCS8EncryptedPrivateKeyInfo encInfo) {
                 try {
                     InputDecryptorProvider decryptorProvider = new JceOpenSSLPKCS8DecryptorProviderBuilder().build(effectivePassphrase);
                     PrivateKeyInfo keyInfo = encInfo.decryptPrivateKeyInfo(decryptorProvider);
-                    PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(keyInfo.getEncoded());
-                    return KeyFactory.getInstance("RSA").generatePrivate(keySpec);
-                } catch (IOException e) {
+                    return new JcaPEMKeyConverter().setProvider(BouncyCastleProvider.PROVIDER_NAME).getPrivateKey(keyInfo);
+                } catch (Exception e) {
                     throw new RuntimeException("Failed to decrypt private key. Check that the passphrase is correct and the key is compatible. Original error: " + e.getMessage(), e);
                 }
             } else {
